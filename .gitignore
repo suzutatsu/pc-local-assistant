@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+
+# Browser profile
+chrome_profile/
+
+# OS specific
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
