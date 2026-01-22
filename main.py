@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from langchain_google_vertexai import ChatVertexAI
 from browser_use import Agent, Controller
-from browser_use.browser.browser import Browser, BrowserConfig, BrowserContextConfig
+from browser_use.browser import Browser, BrowserConfig, BrowserContextConfig
 
 # 環境変数の読み込み
 load_dotenv()

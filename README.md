@@ -23,6 +23,9 @@ source venv/bin/activate
 # 依存関係のインストール
 pip install -r requirements.txt
 playwright install
+
+# 環境チェック（オプション）
+python3 test_setup.py
 ```
 
 ### 3. Google Cloud設定と認証（Service Account）
