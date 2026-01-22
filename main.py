@@ -20,6 +20,18 @@ class VertexAIWrapper(ChatVertexAI):
     def model(self):
         return self.model_name
 
+# Monkey-patch to increase navigation timeout (default 4s is too short)
+# This overrides the internal method of browser_use.browser.session.BrowserSession (aliased as Browser)
+original_navigate_and_wait = Browser._navigate_and_wait
+
+async def patched_navigate_and_wait(self, url, target_id, timeout=None):
+    if timeout is None:
+        # Increase the default 4s timeout to 20s for slower pages
+        timeout = 20.0
+    return await original_navigate_and_wait(self, url, target_id, timeout)
+
+Browser._navigate_and_wait = patched_navigate_and_wait
+
 async def main():
     # Gemini Flashモデルの設定
     # ユーザー指定のモデル、もしくは最新のFlashモデル（gemini-3-flash-preview）を使用
