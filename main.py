@@ -1,4 +1,5 @@
 import os
+import asyncio
 from dotenv import load_dotenv
 from langchain_google_vertexai import ChatVertexAI
 from browser_use import Agent, Controller, Browser
