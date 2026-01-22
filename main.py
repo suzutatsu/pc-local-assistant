@@ -47,6 +47,7 @@ async def main():
     browser = Browser(
         headless=False, # 動作確認のためヘッドレスモードをオフにする
         user_data_dir=profile_path,
+        enable_default_extensions=False, # 組織ポリシー等で拡張機能インストールが制限される場合に備え無効化
         # chrome_instance_path=None, # デフォルトのChromeを使用
         # other args...
     )
@@ -77,21 +78,40 @@ async def main():
         print(f"   説明: {t.get('description')}")
     print("-------------------------")
 
-    while True:
-        choice = input("実行したいタスクの番号を入力してください (qで終了): ")
-        if choice.lower() == 'q':
-            print("終了します。")
-            return
-        
+    selected_task = None
+    import sys
+    
+    # Check for CLI arguments
+    if len(sys.argv) > 1:
+        arg = sys.argv[1]
         try:
-            idx = int(choice) - 1
+            # Try 1-based index
+            idx = int(arg) - 1
             if 0 <= idx < len(tasks):
                 selected_task = tasks[idx]
-                break
-            else:
-                print("無効な番号です。もう一度入力してください。")
         except ValueError:
-            print("番号を入力してください。")
+            # Optional: Support task ID string matching in future, currently just ignoring
+            pass
+            
+    if selected_task:
+        print(f"CLI引数でタスクが選択されました: {sys.argv[1]}")
+    else:
+        # Interactive Mode
+        while True:
+            choice = input("実行したいタスクの番号を入力してください (qで終了): ")
+            if choice.lower() == 'q':
+                print("終了します。")
+                return
+            
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(tasks):
+                    selected_task = tasks[idx]
+                    break
+                else:
+                    print("無効な番号です。もう一度入力してください。")
+            except ValueError:
+                print("番号を入力してください。")
 
     print(f"\n選択されたタスク: {selected_task.get('name')}")
     # ユーザーが「ログイン完了」等を伝えやすいように変数名をそのまま使用
@@ -131,7 +151,7 @@ async def main():
     print(history.final_result())
 
     # ブラウザを閉じる
-    await browser.close()
+    # await browser.close() # browser-use 0.11.3 handles cleanup automatically
 
 if __name__ == "__main__":
     asyncio.run(main())
