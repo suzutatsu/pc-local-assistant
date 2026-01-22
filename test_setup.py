@@ -9,8 +9,8 @@ try:
     import browser_use
     print(f"  - browser_use: {browser_use.__version__ if hasattr(browser_use, '__version__') else 'installed'}")
     
-    from browser_use.browser import Browser, BrowserConfig
-    print("  - browser_use.browser import successful")
+    from browser_use import Browser
+    print("  - browser_use.Browser import successful")
 
     import langchain_google_vertexai
     print("  - langchain_google_vertexai import successful")

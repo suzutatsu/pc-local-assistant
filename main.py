@@ -1,8 +1,7 @@
 import os
 from dotenv import load_dotenv
 from langchain_google_vertexai import ChatVertexAI
-from browser_use import Agent, Controller
-from browser_use.browser import Browser, BrowserConfig, BrowserContextConfig
+from browser_use import Agent, Controller, Browser
 
 # 環境変数の読み込み
 load_dotenv()
@@ -29,20 +28,13 @@ async def main():
     current_dir = os.getcwd()
     profile_path = os.path.join(current_dir, "chrome_profile")
     
-    # ブラウザの初期化
-    # new_context_config で user_data_dir を指定し、プロファイルを永続化します
+    # ブラウザの初期化 (0.11.3以降のAPI)
+    # Browser (BrowserSession) に直接設定を渡します
     browser = Browser(
-        config=BrowserConfig(
-            headless=False, # 動作確認のためヘッドレスモードをオフにする
-            chrome_instance_path=None, # デフォルトのChromeを使用
-        )
-    )
-
-    # コンテキスト設定（永続化のため）
-    context_config = BrowserContextConfig(
+        headless=False, # 動作確認のためヘッドレスモードをオフにする
         user_data_dir=profile_path,
-        # 必要に応じてウィンドウサイズなどを指定
-        # viewport={'width': 1280, 'height': 720}
+        # chrome_instance_path=None, # デフォルトのChromeを使用
+        # other args...
     )
 
     # タスク設定の読み込み
@@ -113,7 +105,6 @@ async def main():
         task=task_description,
         llm=llm,
         browser=browser,
-        browser_context_config=context_config,
         controller=controller
     )
 
