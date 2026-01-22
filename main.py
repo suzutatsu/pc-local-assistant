@@ -49,10 +49,11 @@ async def main():
         temperature=0
     )
 
-    # 永続的なChromeプロファイルの設定
-    # プロジェクトディレクトリ内に 'chrome_profile' ディレクトリを作成して使用します
+    # 永続的なブラウザプロファイルの設定
+    # プロジェクトディレクトリ内に 'browser_profile' ディレクトリを作成して使用します
     current_dir = os.getcwd()
-    profile_path = os.path.join(current_dir, "chrome_profile")
+    profile_path = os.path.join(current_dir, "browser_profile")
+    os.makedirs(profile_path, exist_ok=True)
     
     # ブラウザの初期化 (0.11.3以降のAPI)
     # Browser (BrowserSession) に直接設定を渡します

@@ -11,6 +11,7 @@ env/
 
 # Browser profile
 chrome_profile/
+browser_profile/
 
 # OS specific
 .DS_Store
