@@ -18,3 +18,6 @@ chrome_profile/
 # IDE
 .vscode/
 .idea/
+
+# Service Account Keys
+*.json

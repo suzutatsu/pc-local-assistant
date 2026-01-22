@@ -1,7 +1,6 @@
-import asyncio
 import os
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_vertexai import ChatVertexAI
 from browser_use import Agent, Controller
 from browser_use.browser.browser import Browser, BrowserConfig, BrowserContextConfig
 
@@ -12,11 +11,16 @@ async def main():
     # Gemini Flashモデルの設定
     # ユーザー指定のモデル、もしくは最新のFlashモデル（gemini-3-flash-preview）を使用
     model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
-    print(f"Using Gemini Model: {model_name}")
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+    location = os.getenv("GOOGLE_CLOUD_REGION", "asia-northeast1")
     
-    llm = ChatGoogleGenerativeAI(
-        model=model_name,
-        google_api_key=os.getenv("GOOGLE_API_KEY"),
+    print(f"Using Vertex AI Model: {model_name}")
+    print(f"Project: {project_id}, Region: {location}")
+    
+    llm = ChatVertexAI(
+        model_name=model_name,
+        project=project_id,
+        location=location,
         temperature=0
     )
 

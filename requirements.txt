@@ -1,5 +1,5 @@
 browser-use
-langchain-google-genai
+langchain-google-vertexai
 playwright
 python-dotenv
 pyyaml
