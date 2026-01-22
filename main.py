@@ -1,24 +1,13 @@
 import os
 import asyncio
+import logging
 from dotenv import load_dotenv
-from langchain_google_vertexai import ChatVertexAI
 from browser_use import Agent, Controller, Browser
+from browser_use.llm.google import ChatGoogle
+from google.auth import load_credentials_from_file
 
 # 環境変数の読み込み
 load_dotenv()
-
-# ChatVertexAI Wrapper to satisfy browser-use requirements
-class VertexAIWrapper(ChatVertexAI):
-    class Config:
-        extra = 'allow'
-
-    @property
-    def provider(self):
-        return "vertex"
-    
-    @property
-    def model(self):
-        return self.model_name
 
 # Monkey-patch to increase navigation timeout (default 4s is too short)
 # This overrides the internal method of browser_use.browser.session.BrowserSession (aliased as Browser)
@@ -38,14 +27,27 @@ async def main():
     model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
     location = os.getenv("GOOGLE_CLOUD_REGION", "asia-northeast1")
+    credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     
     print(f"Using Vertex AI Model: {model_name}")
     print(f"Project: {project_id}, Region: {location}")
+    print(f"Credentials Path: {credentials_path}")
+
+    # Load credentials if path is provided
+    credentials = None
+    if credentials_path and os.path.exists(credentials_path):
+        credentials, _ = load_credentials_from_file(
+            credentials_path,
+            scopes=['https://www.googleapis.com/auth/cloud-platform']
+        )
     
-    llm = VertexAIWrapper(
-        model_name=model_name,
+    # Use ChatGoogle (native browser-use component)
+    llm = ChatGoogle(
+        model=model_name,
+        vertexai=True,
         project=project_id,
         location=location,
+        credentials=credentials,
         temperature=0
     )
 
