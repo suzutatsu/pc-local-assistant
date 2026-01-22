@@ -4,7 +4,7 @@ Mac上で動作する、AI主導のブラウザ操作アシスタントです。
 Chromeブラウザを自動操作し、認証が必要な社内ページなどからの情報収集を行います。
 
 ## 特徴
-- **Gemini Flash**: 高速なGemini 1.5 Flashモデルを使用。
+- **Gemini Flash**: 高速なGemini 3 Flash (Preview) モデルをGoogle Cloud Vertex AI経由で使用。
 - **browser-use**: 高度なブラウザ操作エージェントライブラリを使用。
 - **永続化プロファイル**: `chrome_profile` ディレクトリを使用し、ログイン状態やCookieを保持します。
 
