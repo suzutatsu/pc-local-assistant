@@ -7,6 +7,19 @@ from browser_use import Agent, Controller, Browser
 # 環境変数の読み込み
 load_dotenv()
 
+# ChatVertexAI Wrapper to satisfy browser-use requirements
+class VertexAIWrapper(ChatVertexAI):
+    class Config:
+        extra = 'allow'
+
+    @property
+    def provider(self):
+        return "vertex"
+    
+    @property
+    def model(self):
+        return self.model_name
+
 async def main():
     # Gemini Flashモデルの設定
     # ユーザー指定のモデル、もしくは最新のFlashモデル（gemini-3-flash-preview）を使用
@@ -17,7 +30,7 @@ async def main():
     print(f"Using Vertex AI Model: {model_name}")
     print(f"Project: {project_id}, Region: {location}")
     
-    llm = ChatVertexAI(
+    llm = VertexAIWrapper(
         model_name=model_name,
         project=project_id,
         location=location,
