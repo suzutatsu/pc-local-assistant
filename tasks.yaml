@@ -23,3 +23,25 @@ tasks:
       在庫管理システム (https://inventory.example.com) にアクセスしてください。
       ログインが必要な場合、ask_user ツールを使ってユーザーにログインを依頼してください。
       ログイン後、検索窓に「商品コード: A-12345」を入力して検索し、現在の「東京倉庫」と「大阪倉庫」の在庫数を教えてください。
+
+  - id: "estimation_creation"
+    name: "見積書作成"
+    description: "テンプレートを元に見積書を作成します。"
+    use_browser: false
+    prompt: |
+      ask_user ツールを使って、以下の情報をユーザーから取得してください。
+      （ただし、もし [ユーザー提供コンテキスト] として情報が既に提供されている場合は、質問をスキップしてその情報を使用してください。コンテキストは "ID 金額 開始日 終了日" の順で渡されます。）
+      
+      1. ID
+      2. 金額
+      3. 開始日
+      4. 終了日
+      
+      情報が取得できたら、create_excel_from_template ツールを使って見積書を作成してください。
+      
+      引数は以下のように設定してください:
+      - template_path: "./template.xlsx"
+      - output_path: "./estimations/estimate_{ID}.xlsx"
+      - updates_json: '{{"Sheet1!B2": "{ID}", "Sheet1!B6": "{金額}", "Sheet1!B3": "{開始日}", "Sheet1!D3": "{終了日}", "Sheet1!E1": "今日の日付"}}'
+      
+      作成が完了したら、「見積書を作成しました: {出力パス}」と報告してください。
