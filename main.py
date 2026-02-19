@@ -5,23 +5,10 @@ from dotenv import load_dotenv
 from browser_use import Agent, Controller, Browser
 from browser_use.llm.google import ChatGoogle
 from google.auth import load_credentials_from_file
-import openpyxl
 
 
 # 環境変数の読み込み
 load_dotenv()
-
-# ナビゲーションのタイムアウトを延長するためのモンキーパッチ（デフォルトの4秒は短すぎるため）
-# これは browser_use.browser.session.BrowserSession (Browser としてエイリアス) の内部メソッドをオーバーライドします
-original_navigate_and_wait = Browser._navigate_and_wait
-
-async def patched_navigate_and_wait(self, url, target_id, timeout=None):
-    if timeout is None:
-        # 遅いページのためにデフォルトの4秒のタイムアウトを20秒に延長
-        timeout = 20.0
-    return await original_navigate_and_wait(self, url, target_id, timeout)
-
-Browser._navigate_and_wait = patched_navigate_and_wait
 
 async def main():
     # Gemini Flashモデルの設定
@@ -140,8 +127,7 @@ async def main():
     profile_path = os.path.join(current_dir, "browser_profile")
     os.makedirs(profile_path, exist_ok=True)
     
-    # ブラウザの初期化 (0.11.3以降のAPI)
-    # Browser (BrowserSession) に直接設定を渡します
+    # ブラウザの初期化
     browser = Browser(
         headless=headless_mode, 
         user_data_dir=profile_path,
@@ -166,62 +152,6 @@ async def main():
         print(f"\n\n[Agentからの質問]: {question}")
         return input("回答を入力してください (入力後Enter): ")
 
-    @controller.action("create_excel_from_template")
-    def create_excel_from_template(template_path: str, output_path: str, updates_json: str):
-        """
-        テンプレートから新しいExcelファイルを作成し、特定のセルを更新します。
-        
-        Args:
-            template_path: テンプレートExcelファイル(.xlsx)への絶対パス
-            output_path: 新しいExcelファイルを保存する場所への絶対パス
-            updates_json: 'SheetName!CellAddress' (例: 'Sheet1!A1') をキーとし、
-                          そのセルの新しい内容を値とする辞書を表すJSON文字列。
-                          例: '{"Sheet1!A1": "Hello", "Sheet1!B2": "World"}'
-                     
-        Returns:
-            成功またはエラーメッセージを示す文字列。
-        """
-        try:
-            import json
-            
-            try:
-                updates = json.loads(updates_json)
-            except json.JSONDecodeError as e:
-                return f"Error: Failed to parse updates_json. Make sure it is a valid JSON string. Error: {e}"
-            # Resolve relative paths
-            if not os.path.isabs(template_path):
-                template_path = os.path.abspath(os.path.join(os.getcwd(), template_path))
-            if not os.path.isabs(output_path):
-                output_path = os.path.abspath(os.path.join(os.getcwd(), output_path))
-
-            if not os.path.exists(template_path):
-                return f"Error: Template file not found at {template_path}"
-            
-            wb = openpyxl.load_workbook(template_path)
-            
-            for location, value in updates.items():
-                if '!' in location:
-                    sheet_name, cell_address = location.split('!', 1)
-                    if sheet_name in wb.sheetnames:
-                        ws = wb[sheet_name]
-                    else:
-                        return f"Error: Sheet '{sheet_name}' not found in template."
-                else:
-                    # Default to active sheet if no sheet specified
-                    ws = wb.active
-                    cell_address = location
-                
-                ws[cell_address] = value
-                
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            
-            wb.save(output_path)
-            return f"Successfully created Excel file at {output_path} with updated values."
-            
-        except Exception as e:
-            return f"Error processing Excel file: {str(e)}"
-
     # エージェントの作成
     agent = Agent(
         task=task_description,
@@ -239,7 +169,7 @@ async def main():
     print(history.final_result())
 
     # ブラウザを閉じる
-    # await browser.close() # browser-use 0.11.3 handles cleanup automatically
+    # await browser.close() # browser-use automatically handles cleanup
 
 if __name__ == "__main__":
     asyncio.run(main())
