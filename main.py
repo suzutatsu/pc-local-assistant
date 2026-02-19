@@ -1,4 +1,5 @@
 import os
+import datetime
 import asyncio
 import logging
 from dotenv import load_dotenv
@@ -166,7 +167,58 @@ async def main():
     
     # 結果の表示
     print("\n--- 実行結果 ---")
-    print(history.final_result())
+    result = history.final_result()
+    print(result)
+
+    # 振り返りの自動生成と保存
+    print("\n--- 振り返りを生成中 ---")
+    
+    reflection_prompt = f"""
+    以下の観点で、今回のタスク『{selected_task.get('name')}』の実行プロセスを振り返り、簡潔にまとめてください：
+    1. **目的**: ループや知識不足による不要なステップを減らし、より少ないステップ数で効率的に要件を満たすこと。
+    2. **分析**: どの手順でつまずいたか、無駄な操作がなかったか。
+    3. **改善案**: 次回同様のタスクを行う際、プロンプトをどのように変更すれば、よりスムーズかつ短手順で完了できるか。（**現状で十分に効率的であれば、あえて改善案を挙げる必要はありません**）
+
+    実行履歴:
+    {result}
+    """
+    
+    try:
+        from langchain_core.messages import HumanMessage
+        reflection_content = await llm.ainvoke([HumanMessage(content=reflection_prompt)])
+        
+        if hasattr(reflection_content, 'content'):
+            reflection_text = reflection_content.content
+        elif hasattr(reflection_content, 'completion'):
+            reflection_text = reflection_content.completion
+        else:
+            reflection_text = str(reflection_content)
+        
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # historyはAgentHistoryListオブジェクト。steps等の属性があるか不明だが、長さを取得できると仮定
+        # もし len() が使えない場合は 'N/A' とする
+        try:
+             step_count = len(history.history)
+        except:
+             step_count = "Unknown"
+        
+        reflection_entry = f"""
+## {timestamp} - {selected_task.get('name')}
+- **Model**: {model_name}
+- **Steps**: {step_count}
+- **Reflection**:
+{reflection_text}
+"""
+        
+        reflection_file = os.path.join(current_dir, "REFLECTION.md")
+        with open(reflection_file, "a", encoding="utf-8") as f:
+            f.write(reflection_entry + "\n")
+            
+        print(f"振り返りを REFLECTION.md に保存しました。")
+        print(reflection_entry)
+
+    except Exception as e:
+        print(f"振り返りの生成または保存に失敗しました: {e}")
 
     # ブラウザを閉じる
     # await browser.close() # browser-use automatically handles cleanup
