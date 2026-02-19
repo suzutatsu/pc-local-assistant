@@ -22,3 +22,6 @@ browser_profile/
 
 # Service Account Keys
 *.json
+
+# Config
+tasks.yaml

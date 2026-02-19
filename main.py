@@ -48,7 +48,7 @@ async def main():
     current_dir = os.getcwd()
     tasks_file = os.path.join(current_dir, "tasks.yaml")
     if not os.path.exists(tasks_file):
-        print(f"エラー: 設定ファイル {tasks_file} が見つかりません。")
+        print(f"エラー: 設定ファイル {tasks_file} が見つかりません。tasks.yaml.example をコピーして tasks.yaml を作成してください。")
         return
 
     with open(tasks_file, 'r', encoding='utf-8') as f:
