@@ -151,6 +151,9 @@ async def main():
         headless=headless_mode, 
         user_data_dir=profile_path,
         enable_default_extensions=False, # 組織ポリシー等で拡張機能インストールが制限される場合に備え無効化
+        # 操作の安定性を高めるための待機設定
+        wait_between_actions=1.0,         # 各アクション（クリック・入力など）の間に1秒待機
+        minimum_wait_page_load_time=2.0,  # ページロード時に最低2秒待機してDOMレンダリングを確実にする
         # chrome_instance_path=None, # デフォルトのChromeを使用
         # other args...
     )
@@ -222,7 +225,12 @@ async def main():
         task=task_description,
         llm=llm,
         browser=browser,
-        controller=controller
+        controller=controller,
+        # 認識精度向上のための設定
+        use_vision=True,               # 画像認識を明示的に有効化
+        vision_detail_level="high",    # より高精細な画像をLLMに渡し、UI要素の認識精度を向上させる
+        use_thinking=True,             # LLMによるプランニングと推論を有効化
+        enable_planning=True
     )
 
     # エージェントの実行

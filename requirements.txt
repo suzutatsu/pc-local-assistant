@@ -1,4 +1,4 @@
-browser-use==0.12.2
+browser-use>=0.12.2
 langchain-google-vertexai==3.2.2
 playwright==1.58.0
 python-dotenv==1.2.1
