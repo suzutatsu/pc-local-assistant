@@ -11,6 +11,19 @@ from google.auth import load_credentials_from_file
 # 環境変数の読み込み
 load_dotenv()
 
+def _get_jira_client():
+    jira_server = os.getenv("JIRA_SERVER")
+    jira_email = os.getenv("JIRA_USER_EMAIL")
+    jira_token = os.getenv("JIRA_API_TOKEN")
+    if not (jira_server and jira_email and jira_token):
+        return None, "エラー: Jiraの認証情報が .env に設定されていません。"
+    try:
+        from jira import JIRA
+        jira = JIRA(server=jira_server, basic_auth=(jira_email, jira_token))
+        return jira, None
+    except Exception as e:
+        return None, f"Jira初期化エラー: {e}"
+
 async def main():
     # Gemini Flashモデルの設定
     # ユーザー指定のモデル、もしくは最新のFlashモデル（gemini-3-flash-preview）を使用
@@ -157,6 +170,52 @@ async def main():
         """
         print(f"\n\n[Agentからの質問]: {question}")
         return input("回答を入力してください (入力後Enter): ")
+
+    @controller.action("search_jira_issues")
+    def search_jira_issues(jql: str):
+        """
+        Jiraのチケットを検索します。
+        例: 'project = PROJ AND status = "In Progress"'
+        """
+        jira, error = _get_jira_client()
+        if error: return error
+        
+        try:
+            issues = jira.search_issues(jql, maxResults=10)
+            if not issues:
+                return "JQLに一致するチケットは見つかりませんでした。"
+            return [{"key": issue.key, "summary": issue.fields.summary, "status": str(issue.fields.status)} for issue in issues]
+        except Exception as e:
+            return f"Jira検索エラー: {e}"
+
+    @controller.action("add_jira_comment")
+    def add_jira_comment(issue_key: str, comment: str):
+        """
+        指定したJiraチケット(例: PROJ-123)にコメントを追加します。
+        """
+        jira, error = _get_jira_client()
+        if error: return error
+        
+        try:
+            jira.add_comment(issue_key, comment)
+            return f"チケット {issue_key} にコメントを追加しました。"
+        except Exception as e:
+            return f"Jiraコメント追加エラー: {e}"
+
+    @controller.action("update_jira_issue_description")
+    def update_jira_issue_description(issue_key: str, description: str):
+        """
+        指定したJiraチケット(例: PROJ-123)の説明(Description)を更新します。
+        """
+        jira, error = _get_jira_client()
+        if error: return error
+        
+        try:
+            issue = jira.issue(issue_key)
+            issue.update(description=description)
+            return f"チケット {issue_key} の説明を更新しました。"
+        except Exception as e:
+            return f"Jira説明更新エラー: {e}"
 
     # エージェントの作成
     agent = Agent(
