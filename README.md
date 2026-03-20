@@ -55,6 +55,7 @@ GOOGLE_CLOUD_PROJECT=your-project-id  # プロジェクトID
 GOOGLE_CLOUD_REGION=asia-northeast1   # リージョン（必要に応じて変更）
 GOOGLE_APPLICATION_CREDENTIALS=./service_account_key.json # 配置したキーファイルのパス
 GEMINI_MODEL_NAME=gemini-3-flash-preview
+TASK_YAML_PATH=./tasks.yaml           # タスク定義ファイルのパス（任意）
 ```
 
 ## 実行方法
