@@ -25,34 +25,45 @@ def _get_jira_client():
         return None, f"Jira初期化エラー: {e}"
 
 async def main():
-    # Gemini Flashモデルの設定
-    # ユーザー指定のモデル、もしくは最新のFlashモデル（gemini-3-flash-preview）を使用
-    model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-    location = os.getenv("GOOGLE_CLOUD_REGION", "asia-northeast1")
-    credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    llm_provider = os.getenv("LLM_PROVIDER", "vertexai").lower()
     
-    print(f"Using Vertex AI Model: {model_name}")
-    print(f"Project: {project_id}, Region: {location}")
-    print(f"Credentials Path: {credentials_path}")
-
-    # パスが指定されている場合、認証情報を読み込む
-    credentials = None
-    if credentials_path and os.path.exists(credentials_path):
-        credentials, _ = load_credentials_from_file(
-            credentials_path,
-            scopes=['https://www.googleapis.com/auth/cloud-platform']
+    if llm_provider == "ollama":
+        from langchain_ollama import ChatOllama
+        model_name = os.getenv("OLLAMA_MODEL", "gemma4")
+        print(f"Using Ollama Local Model: {model_name}")
+        llm = ChatOllama(
+            model=model_name,
+            temperature=0
         )
-    
-    # ChatGoogleを使用 (browser-useのネイティブコンポーネント)
-    llm = ChatGoogle(
-        model=model_name,
-        vertexai=True,
-        project=project_id,
-        location=location,
-        credentials=credentials,
-        temperature=0
-    )
+    else:
+        # Gemini Flashモデルの設定
+        # ユーザー指定のモデル、もしくは最新のFlashモデル（gemini-3-flash-preview）を使用
+        model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+        location = os.getenv("GOOGLE_CLOUD_REGION", "asia-northeast1")
+        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        
+        print(f"Using Vertex AI Model: {model_name}")
+        print(f"Project: {project_id}, Region: {location}")
+        print(f"Credentials Path: {credentials_path}")
+
+        # パスが指定されている場合、認証情報を読み込む
+        credentials = None
+        if credentials_path and os.path.exists(credentials_path):
+            credentials, _ = load_credentials_from_file(
+                credentials_path,
+                scopes=['https://www.googleapis.com/auth/cloud-platform']
+            )
+        
+        # ChatGoogleを使用 (browser-useのネイティブコンポーネント)
+        llm = ChatGoogle(
+            model=model_name,
+            vertexai=True,
+            project=project_id,
+            location=location,
+            credentials=credentials,
+            temperature=0
+        )
 
     # タスク設定の読み込み
     import yaml
