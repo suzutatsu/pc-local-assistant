@@ -45,3 +45,12 @@ tasks:
       - updates_json: '{{"Sheet1!B2": "{ID}", "Sheet1!B6": "{金額}", "Sheet1!B3": "{開始日}", "Sheet1!D3": "{終了日}", "Sheet1!E1": "今日の日付"}}'
       
       作成が完了したら、「見積書を作成しました: {出力パス}」と報告してください。
+
+  - id: "sequence_demo"
+    name: "複数タスク連続実行テスト"
+    description: "在庫チェックの後に見積書作成を連続して実行します。"
+    type: "sequence"
+    steps:
+      - "inventory_check"
+      - "estimation_creation"
+    pass_context: true
