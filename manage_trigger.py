@@ -6,7 +6,7 @@ import shutil
 
 # 絶対パスの動的解決
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-PLIST_LABEL = "com.suzutatsu.pc-local-assistant-trigger"
+PLIST_LABEL = "org.local.pc-assistant-trigger"
 PLIST_FILE_NAME = f"{PLIST_LABEL}.plist"
 LAUNCH_AGENTS_DIR = os.path.expanduser("~/Library/LaunchAgents")
 PLIST_DEST_PATH = os.path.join(LAUNCH_AGENTS_DIR, PLIST_FILE_NAME)
