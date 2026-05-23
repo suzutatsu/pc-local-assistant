@@ -180,4 +180,3 @@ python3 manage_trigger.py status
 
 ## 謝辞
 このプロジェクトの開発は、Google Antigravityの支援を受けて行われました。
-
