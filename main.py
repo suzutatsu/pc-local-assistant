@@ -1,7 +1,9 @@
 import os
+import sys
 import datetime
 import asyncio
 import logging
+import yaml
 from dotenv import load_dotenv
 from browser_use import Agent, Controller, Browser
 from browser_use.llm.google import ChatGoogle
@@ -66,14 +68,12 @@ async def main():
         )
 
     # タスク設定の読み込み
-    import yaml
-    import sys
 
+    current_dir = os.getcwd()
     task_yaml_path = os.getenv("TASK_YAML_PATH")
     if task_yaml_path:
         tasks_file = task_yaml_path
     else:
-        current_dir = os.getcwd()
         tasks_file = os.path.join(current_dir, "tasks.yaml")
         
     if not os.path.exists(tasks_file):
@@ -241,96 +241,96 @@ async def main():
             return f"Jira説明更新エラー: {e}"
 
     previous_result = ""
-    
-    for idx, current_task in enumerate(tasks_to_run):
-        task_name = current_task.get('name')
-        task_description = current_task.get('prompt', '')
-        
-        if not task_description:
-            print(f"タスク '{task_name}' の説明（prompt）が空のためスキップします。")
-            continue
-            
-        if context_info:
-            task_description += f"\n\n[ユーザー提供コンテキスト]: {context_info}\n(ここに情報が含まれている場合は、ask_userを使わずにそれを直接使用してください。)"
-            
-        if pass_context and idx > 0 and previous_result:
-            task_description += f"\n\n【前段タスクからの引き継ぎデータ】:\n{previous_result}"
-            
-        # エージェントの作成
-        agent = Agent(
-            task=task_description,
-            llm=llm,
-            browser=browser,
-            controller=controller,
-            # 認識精度向上のための設定
-            use_vision=True,               # 画像認識を明示的に有効化
-            vision_detail_level="high",    # より高精細な画像をLLMに渡し、UI要素の認識精度を向上させる
-            use_thinking=True,             # LLMによるプランニングと推論を有効化
-            enable_planning=True
-        )
 
-        # エージェントの実行
-        print(f"\n[{idx+1}/{len(tasks_to_run)}] エージェントを実行中: {task_name}")
-        history = await agent.run()
-        
-        # 結果の表示
-        print(f"\n--- {task_name} の実行結果 ---")
-        result = history.final_result()
-        print(result)
-        previous_result = result
-
-        # 振り返りの自動生成と保存
-        print("\n--- 振り返りを生成中 ---")
-        
-        reflection_prompt = f"""
-        以下の観点で、今回のタスク『{task_name}』の実行プロセスを振り返り、簡潔にまとめてください：
-        1. **目的**: ループや知識不足による不要なステップを減らし、より少ないステップ数で効率的に要件を満たすこと。
-        2. **分析**: どの手順でつまずいたか、無駄な操作がなかったか。
-        3. **改善案**: 次回同様のタスクを行う際、プロンプトをどのように変更すれば、よりスムーズかつ短手順で完了できるか。（**現状で十分に効率的であれば、あえて改善案を挙げる必要はありません**）
-
-        実行履歴:
-        {result}
-        """
-        
-        try:
-            from langchain_core.messages import HumanMessage
-            reflection_content = await llm.ainvoke([HumanMessage(content=reflection_prompt)])
+    try:
+        for idx, current_task in enumerate(tasks_to_run):
+            task_name = current_task.get('name')
+            task_description = current_task.get('prompt', '')
             
-            if hasattr(reflection_content, 'content'):
-                reflection_text = reflection_content.content
-            elif hasattr(reflection_content, 'completion'):
-                reflection_text = reflection_content.completion
-            else:
-                reflection_text = str(reflection_content)
+            if not task_description:
+                print(f"タスク '{task_name}' の説明（prompt）が空のためスキップします。")
+                continue
+                
+            if context_info:
+                task_description += f"\n\n[ユーザー提供コンテキスト]: {context_info}\n(ここに情報が含まれている場合は、ask_userを使わずにそれを直接使用してください。)"
+                
+            if pass_context and idx > 0 and previous_result:
+                task_description += f"\n\n【前段タスクからの引き継ぎデータ】:\n{previous_result}"
+                
+            # エージェントの作成
+            agent = Agent(
+                task=task_description,
+                llm=llm,
+                browser=browser,
+                controller=controller,
+                # 認識精度向上のための設定
+                use_vision=True,               # 画像認識を明示的に有効化
+                vision_detail_level="high",    # より高精細な画像をLLMに渡し、UI要素の認識精度を向上させる
+                use_thinking=True,             # LLMによるプランニングと推論を有効化
+                enable_planning=True
+            )
+
+            # エージェントの実行
+            print(f"\n[{idx+1}/{len(tasks_to_run)}] エージェントを実行中: {task_name}")
+            history = await agent.run()
             
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            # historyはAgentHistoryListオブジェクト。steps等の属性があるか不明だが、長さを取得できると仮定
-            # もし len() が使えない場合は 'N/A' とする
+            # 結果の表示
+            print(f"\n--- {task_name} の実行結果 ---")
+            result = history.final_result()
+            print(result)
+            previous_result = result
+
+            # 振り返りの自動生成と保存
+            print("\n--- 振り返りを生成中 ---")
+            
+            reflection_prompt = f"""
+            以下の観点で、今回のタスク『{task_name}』の実行プロセスを振り返り、簡潔にまとめてください：
+            1. **目的**: ループや知識不足による不要なステップを減らし、より少ないステップ数で効率的に要件を満たすこと。
+            2. **分析**: どの手順でつまずいたか、無駄な操作がなかったか。
+            3. **改善案**: 次回同様のタスクを行う際、プロンプトをどのように変更すれば、よりスムーズかつ短手順で完了できるか。（**現状で十分に効率的であれば、あえて改善案を挙げる必要はありません**）
+
+            実行履歴:
+            {result}
+            """
+            
             try:
-                 step_count = len(history.history)
-            except:
-                 step_count = "Unknown"
-            
-            reflection_entry = f"""
+                from langchain_core.messages import HumanMessage
+                reflection_content = await llm.ainvoke([HumanMessage(content=reflection_prompt)])
+                
+                if hasattr(reflection_content, 'content'):
+                    reflection_text = reflection_content.content
+                elif hasattr(reflection_content, 'completion'):
+                    reflection_text = reflection_content.completion
+                else:
+                    reflection_text = str(reflection_content)
+                
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                try:
+                    step_count = len(history.history)
+                except Exception:
+                    step_count = "Unknown"
+                
+                reflection_entry = f"""
 ## {timestamp} - {task_name}
 - **Model**: {model_name}
 - **Steps**: {step_count}
 - **Reflection**:
 {reflection_text}
 """
-            
-            reflection_file = os.path.join(current_dir, "REFLECTION.md")
-            with open(reflection_file, "a", encoding="utf-8") as f:
-                f.write(reflection_entry + "\n")
                 
-            print(f"振り返りを REFLECTION.md に保存しました。")
-            print(reflection_entry)
+                reflection_file = os.path.join(current_dir, "REFLECTION.md")
+                with open(reflection_file, "a", encoding="utf-8") as f:
+                    f.write(reflection_entry + "\n")
+                    
+                print(f"振り返りを REFLECTION.md に保存しました。")
+                print(reflection_entry)
 
-        except Exception as e:
-            print(f"振り返りの生成または保存に失敗しました: {e}")
+            except Exception as e:
+                print(f"振り返りの生成または保存に失敗しました: {e}")
 
-    # ブラウザを閉じる
-    # await browser.close() # browser-use automatically handles cleanup
+    finally:
+        # ブラウザを確実に閉じる（Chromiumプロセスのリーク防止）
+        await browser.close()
 
 if __name__ == "__main__":
     asyncio.run(main())

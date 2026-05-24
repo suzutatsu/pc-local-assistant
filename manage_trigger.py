@@ -31,6 +31,7 @@ class NotificationObserver(NSObject):
         print(f"Received notification: {{notification_name}}", flush=True)
         print("Screen unlocked! Triggering pc-local-assistant...", flush=True)
         
+        log_file = None
         try:
             log_file = open(EXECUTION_LOG, "a", encoding="utf-8")
             log_file.write(f"\\n--- Triggered Screen Unlock ({{notification_name}}) ---\\n")
@@ -46,6 +47,10 @@ class NotificationObserver(NSObject):
             print("Successfully spawned main.py with custom trigger process", flush=True)
         except Exception as e:
             print(f"Error spawning script: {{e}}", flush=True)
+        finally:
+            # Popen はファイルディスクリプタを複製するため、親プロセス側のハンドルは閉じる
+            if log_file is not None:
+                log_file.close()
 
 def main():
     app = NSApplication.sharedApplication()

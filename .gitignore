@@ -21,7 +21,15 @@ browser_profile/
 .idea/
 
 # Service Account Keys
-*.json
+service_account_key.json
+*-credentials.json
 
 # Config
 tasks.yaml
+
+# Auto-generated files
+REFLECTION.md
+pc_local_assistant_trigger.py
+*.plist
+*.log
+estimations/
