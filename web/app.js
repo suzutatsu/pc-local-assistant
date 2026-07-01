@@ -7,6 +7,7 @@ const consoleOutput = document.getElementById('console-output');
 
 const queueContainer = document.getElementById('queue-container');
 const queueItems = document.getElementById('queue-items');
+const resultsList = document.getElementById('results-list');
 
 const askingOverlay = document.getElementById('asking-overlay');
 const askingQuestion = document.getElementById('asking-question');
@@ -17,6 +18,7 @@ let socket;
 let currentStatus = 'idle';
 let currentSchedules = {};
 let currentResults = {};
+let allTasks = []; // タスク一覧の保持用
 
 // APIからタスク一覧、スケジュール一覧、実行結果一覧を取得して表示
 async function fetchTasksSchedulesAndResults() {
@@ -28,10 +30,12 @@ async function fetchTasksSchedulesAndResults() {
         ]);
         
         const tasksData = await tasksRes.json();
+        allTasks = tasksData.tasks || [];
         currentSchedules = await schedulesRes.json();
         currentResults = await resultsRes.json();
         
-        renderTasks(tasksData.tasks);
+        renderTasks(allTasks);
+        renderFinalResults(allTasks);
     } catch (err) {
         console.error('データの取得に失敗しました:', err);
         consoleOutput.innerHTML = `<div class="system-msg" style="color: #ef4444;">APIサーバーとの通信に失敗しました。サーバーが起動しているか確認してください。</div>`;
@@ -46,6 +50,7 @@ function translateDay(day) {
     return days[day] || day;
 }
 
+// 左側：タスク一覧（手動起動とスケジュール設定のみ）の描画
 function renderTasks(tasks) {
     tasksList.innerHTML = '';
     if (!tasks || tasks.length === 0) {
@@ -95,37 +100,6 @@ function renderTasks(tasks) {
             }
         }
 
-        // 前回の実行結果エリアのHTML生成
-        const taskResult = currentResults[task.id];
-        let resultAreaHtml = '';
-        if (taskResult) {
-            const isSuccess = taskResult.status === 'success';
-            const statusClass = isSuccess ? 'result-status-success' : 'result-status-failed';
-            const statusText = isSuccess ? '成功' : '失敗';
-            
-            resultAreaHtml = `
-                <div class="result-container" data-id="${task.id}">
-                    <div class="result-header" onclick="toggleResultBody('${task.id}')">
-                        <span>前回の実行結果 (${taskResult.timestamp})</span>
-                        <span class="result-status-indicator ${statusClass}">${statusText}</span>
-                    </div>
-                    <div class="result-body" id="result-body-${task.id}">
-${escapeHtml(taskResult.result)}
-                    </div>
-                </div>
-            `;
-        } else {
-            resultAreaHtml = `
-                <div class="result-container hidden" data-id="${task.id}">
-                    <div class="result-header" onclick="toggleResultBody('${task.id}')">
-                        <span>前回の実行結果</span>
-                        <span class="result-status-indicator"></span>
-                    </div>
-                    <div class="result-body" id="result-body-${task.id}"></div>
-                </div>
-            `;
-        }
-
         const card = document.createElement('div');
         card.className = 'task-card';
         card.innerHTML = `
@@ -136,9 +110,6 @@ ${escapeHtml(taskResult.result)}
             
             <!-- 実行ボタン -->
             <button class="run-btn" data-id="${task.id}">タスクを実行</button>
-            
-            <!-- 前回の最終結果エリア -->
-            ${resultAreaHtml}
             
             <!-- 定期実行設定フォーム -->
             <div class="schedule-config-area">
@@ -217,14 +188,47 @@ ${escapeHtml(taskResult.result)}
     updateButtonStates();
 }
 
-// 最終結果表示エリアの開閉トグル
-window.toggleResultBody = function(taskId) {
-    const body = document.getElementById(`result-body-${taskId}`);
-    if (body.style.display === 'none') {
-        body.style.display = 'block';
-    } else {
-        body.style.display = 'none';
+// 右上：タスク最終回答一覧の描画
+function renderFinalResults(tasks) {
+    resultsList.innerHTML = '';
+    if (!tasks || tasks.length === 0) {
+        resultsList.innerHTML = '<div class="system-msg">タスクが定義されていません。</div>';
+        return;
     }
+
+    // 過去結果が存在するタスク、または未実行のタスクを並べる
+    tasks.forEach(task => {
+        const result = currentResults[task.id];
+        const card = document.createElement('div');
+        card.className = 'result-card';
+        card.setAttribute('data-id', task.id);
+        
+        if (result) {
+            const isSuccess = result.status === 'success';
+            const statusClass = isSuccess ? 'result-status-success' : 'result-status-failed';
+            const statusText = isSuccess ? '成功' : '失敗';
+            
+            card.innerHTML = `
+                <div class="result-card-header">
+                    <span class="result-card-title">${task.name}</span>
+                    <div>
+                        <span style="margin-right: 8px; font-weight: normal; color: #71717a;">${result.timestamp}</span>
+                        <span class="result-status-indicator ${statusClass}">${statusText}</span>
+                    </div>
+                </div>
+                <div class="result-card-body">${escapeHtml(result.result)}</div>
+            `;
+        } else {
+            card.innerHTML = `
+                <div class="result-card-header">
+                    <span class="result-card-title">${task.name}</span>
+                    <span class="result-status-indicator" style="background-color: #f4f4f5; color: #71717a;">未実行</span>
+                </div>
+                <div class="result-card-body" style="color: #a1a1aa; font-style: italic;">まだタスクが実行されていません。</div>
+            `;
+        }
+        resultsList.appendChild(card);
+    });
 }
 
 // HTMLエスケープ処理
@@ -252,7 +256,6 @@ async function saveSchedule(taskId) {
         return;
     }
 
-    // 毎週・隔週の場合は曜日コードと時刻を結合
     if (type === 'weekly' || type === 'biweekly') {
         const day = daySelect.value;
         value = `${day} ${value}`;
@@ -366,6 +369,7 @@ function handleSocketMessage(msg) {
         }
         
         updateUIState(status, current_task, ask_question, queue_list);
+        renderFinalResults(allTasks);
     } else if (msg.type === 'log') {
         appendLog(msg.data);
     } else if (msg.type === 'status') {
@@ -374,28 +378,34 @@ function handleSocketMessage(msg) {
     } else if (msg.type === 'task_result') {
         const { task_id, status, timestamp, result } = msg.data;
         currentResults[task_id] = { status, timestamp, result };
-        updateTaskCardResult(task_id, status, timestamp, result);
+        
+        // 右上の最終結果一覧の該当カードをリアルタイム更新
+        updateResultCardDOM(task_id, status, timestamp, result);
     }
 }
 
-// 特定のタスクカードの結果表示を更新する
-function updateTaskCardResult(taskId, status, timestamp, result) {
-    const container = document.querySelector(`.result-container[data-id="${taskId}"]`);
-    if (!container) return;
+// 特定の結果カードDOMを直接更新
+function updateResultCardDOM(taskId, status, timestamp, result) {
+    const card = document.querySelector(`.result-card[data-id="${taskId}"]`);
+    if (!card) return;
 
     const isSuccess = status === 'success';
     const statusClass = isSuccess ? 'result-status-success' : 'result-status-failed';
     const statusText = isSuccess ? '成功' : '失敗';
 
-    container.classList.remove('hidden');
-    container.innerHTML = `
-        <div class="result-header" onclick="toggleResultBody('${taskId}')">
-            <span>前回の実行結果 (${timestamp})</span>
-            <span class="result-status-indicator ${statusClass}">${statusText}</span>
+    // 対象タスクのタイトルを取得
+    const task = allTasks.find(t => t.id === taskId);
+    const taskName = task ? task.name : taskId;
+
+    card.innerHTML = `
+        <div class="result-card-header">
+            <span class="result-card-title">${taskName}</span>
+            <div>
+                <span style="margin-right: 8px; font-weight: normal; color: #71717a;">${timestamp}</span>
+                <span class="result-status-indicator ${statusClass}">${statusText}</span>
+            </div>
         </div>
-        <div class="result-body" id="result-body-${taskId}" style="display: block;">
-${escapeHtml(result)}
-        </div>
+        <div class="result-card-body">${escapeHtml(result)}</div>
     `;
 }
 

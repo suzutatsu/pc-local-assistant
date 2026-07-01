@@ -40,11 +40,19 @@
             </div>
         </section>
 
-        <!-- 右側：リアルタイムログコンソール -->
-        <section class="console-panel">
-            <h2>リアルタイムログ</h2>
-            <div id="console-output" class="console-box">
-                <div class="system-msg">ログ接続を待機中...</div>
+        <!-- 右側：結果とログの二分割パネル -->
+        <section class="right-panel">
+            <div class="results-panel">
+                <h2>タスク実行結果 (最終回答)</h2>
+                <div id="results-list" class="results-grid-layout">
+                    <div class="system-msg">実行結果を読み込み中...</div>
+                </div>
+            </div>
+            <div class="console-panel">
+                <h2>リアルタイムログ</h2>
+                <div id="console-output" class="console-box">
+                    <div class="system-msg">ログ接続を待機中...</div>
+                </div>
             </div>
         </section>
     </main>
