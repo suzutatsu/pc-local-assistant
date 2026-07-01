@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# スクリプトがあるディレクトリに移動
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$DIR"
+
+PYTHON="./venv/bin/python"
+
+show_usage() {
+    echo "利用方法:"
+    echo "  ./run start  : Webサーバーを常駐起動 (バックグラウンド)"
+    echo "  ./run stop   : 常駐Webサーバーを停止"
+    echo "  ./run status : 常駐状況・稼働ステータスを確認"
+    echo "  ./run dev    : Webサーバーをフォアグラウンドで起動 (ログ確認・デバッグ用)"
+    echo "  ./run cli    : 従来のCLI対話モードで起動"
+    echo "  ./run <N>    : 指定したタスク番号 <N> をCLIで直接実行"
+}
+
+if [ -z "$1" ]; then
+    show_usage
+    exit 0
+fi
+
+COMMAND=$1
+shift
+
+case "$COMMAND" in
+    start)
+        $PYTHON manage_trigger.py enable-server
+        ;;
+    stop)
+        $PYTHON manage_trigger.py disable-server
+        ;;
+    status)
+        $PYTHON manage_trigger.py status
+        ;;
+    dev)
+        echo "[*] Webサーバーをフォアグラウンドで起動しています..."
+        ./venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000
+        ;;
+    cli)
+        $PYTHON main.py cli "$@"
+        ;;
+    -h|--help|help)
+        show_usage
+        ;;
+    *)
+        # 互換性のため、./run 1 のように引数が数字等の場合は main.py に直接渡す
+        $PYTHON main.py "$COMMAND" "$@"
+        ;;
+esac

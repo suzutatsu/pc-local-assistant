@@ -9,9 +9,12 @@ from browser_use import Agent, Controller, Browser
 from browser_use.llm.google import ChatGoogle
 from google.auth import load_credentials_from_file
 
-
 # 環境変数の読み込み
 load_dotenv()
+
+# ロギング設定
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("pc_local_assistant")
 
 def _get_jira_client():
     jira_server = os.getenv("JIRA_SERVER")
@@ -26,8 +29,30 @@ def _get_jira_client():
     except Exception as e:
         return None, f"Jira初期化エラー: {e}"
 
-async def main():
+def load_tasks(tasks_file=None):
+    current_dir = os.getcwd()
+    if not tasks_file:
+        task_yaml_path = os.getenv("TASK_YAML_PATH")
+        if task_yaml_path:
+            tasks_file = task_yaml_path
+        else:
+            tasks_file = os.path.join(current_dir, "tasks.yaml")
+            
+    if not os.path.exists(tasks_file):
+        logger.error(f"設定ファイル {tasks_file} が見つかりません。")
+        return []
+
+    with open(tasks_file, 'r', encoding='utf-8') as f:
+        try:
+            config = yaml.safe_load(f)
+            return config.get('tasks', [])
+        except yaml.YAMLError as exc:
+            logger.error(f"YAMLファイルの読み込みエラー: {exc}")
+            return []
+
+def initialize_llm():
     llm_provider = os.getenv("LLM_PROVIDER", "vertexai").lower()
+    model_name = "gemini-3.5-flash"
     
     if llm_provider == "ollama":
         from langchain_ollama import ChatOllama
@@ -38,18 +63,12 @@ async def main():
             temperature=0
         )
     else:
-        # Gemini Flashモデルの設定
-        # ユーザー指定のモデル、もしくは最新のFlashモデル（gemini-3-flash-preview）を使用
-        model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
+        model_name = os.getenv("GEMINI_MODEL_NAME", "gemini-3.5-flash")
         project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
         location = os.getenv("GOOGLE_CLOUD_REGION", "asia-northeast1")
         credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
         
         print(f"Using Vertex AI Model: {model_name}")
-        print(f"Project: {project_id}, Region: {location}")
-        print(f"Credentials Path: {credentials_path}")
-
-        # パスが指定されている場合、認証情報を読み込む
         credentials = None
         if credentials_path and os.path.exists(credentials_path):
             credentials, _ = load_credentials_from_file(
@@ -57,7 +76,6 @@ async def main():
                 scopes=['https://www.googleapis.com/auth/cloud-platform']
             )
         
-        # ChatGoogleを使用 (browser-useのネイティブコンポーネント)
         llm = ChatGoogle(
             model=model_name,
             vertexai=True,
@@ -66,122 +84,10 @@ async def main():
             credentials=credentials,
             temperature=0
         )
-
-    # タスク設定の読み込み
-
-    current_dir = os.getcwd()
-    task_yaml_path = os.getenv("TASK_YAML_PATH")
-    if task_yaml_path:
-        tasks_file = task_yaml_path
-    else:
-        tasks_file = os.path.join(current_dir, "tasks.yaml")
         
-    if not os.path.exists(tasks_file):
-        print(f"エラー: 設定ファイル {tasks_file} が見つかりません。tasks.yaml.example をコピーして tasks.yaml を作成してください。")
-        return
+    return llm, model_name
 
-    with open(tasks_file, 'r', encoding='utf-8') as f:
-        try:
-            config = yaml.safe_load(f)
-            tasks = config.get('tasks', [])
-        except yaml.YAMLError as exc:
-            print(f"YAMLファイルの読み込みエラー: {exc}")
-            return
-
-    if not tasks:
-        print("実行可能なタスクが定義されていません。")
-        return
-
-    selected_task = None
-    
-    # CLI引数を確認
-    if len(sys.argv) > 1:
-        arg = sys.argv[1]
-        try:
-            # 1始まりのインデックスを試行
-            idx = int(arg) - 1
-            if 0 <= idx < len(tasks):
-                selected_task = tasks[idx]
-        except ValueError:
-            pass
-            
-    if selected_task:
-        print(f"CLI引数でタスクが選択されました: {sys.argv[1]}")
-    else:
-        print("\n--- 実行可能タスク一覧 ---")
-        for i, t in enumerate(tasks):
-            print(f"{i + 1}. {t.get('name')} ({t.get('id')})")
-            print(f"   説明: {t.get('description')}")
-        print("-------------------------")
-
-        # 対話モード
-        while True:
-            choice = input("実行したいタスクの番号を入力してください (qで終了): ")
-            if choice.lower() == 'q':
-                print("終了します。")
-                return
-            
-            try:
-                idx = int(choice) - 1
-                if 0 <= idx < len(tasks):
-                    selected_task = tasks[idx]
-                    break
-                else:
-                    print("無効な番号です。もう一度入力してください。")
-            except ValueError:
-                print("番号を入力してください。")
-
-    print(f"\n選択されたタスク: {selected_task.get('name')}")
-
-    # CLI引数からコンテキストを追加 (2つ目以降の引数がある場合)
-    context_info = ""
-    if len(sys.argv) > 2:
-        extra_args = sys.argv[2:]
-        context_info = " ".join(extra_args)
-        print(f"追加コンテキスト: {context_info}")
-
-    # ===== Sequence 解析 =====
-    is_sequence = selected_task.get("type") == "sequence"
-    if is_sequence:
-        sequence_steps = selected_task.get("steps", [])
-        pass_context = selected_task.get("pass_context", False)
-        tasks_to_run = []
-        for step_id in sequence_steps:
-            step_task = next((t for t in tasks if t.get("id") == step_id), None)
-            if step_task:
-                tasks_to_run.append(step_task)
-            else:
-                print(f"エラー: Sequence に定義されたタスク '{step_id}' が見つかりません。")
-                return
-    else:
-        tasks_to_run = [selected_task]
-        pass_context = False
-
-    # ブラウザの仕様設定 (タスク群の中に use_browser: True のものがあれば表示する)
-    use_browser = any(t.get('use_browser', True) for t in tasks_to_run)
-    headless_mode = not use_browser
-
-    # 永続的なブラウザプロファイルの設定
-    # プロジェクトディレクトリ内に 'browser_profile' ディレクトリを作成して使用します
-    profile_path = os.path.join(current_dir, "browser_profile")
-    os.makedirs(profile_path, exist_ok=True)
-    
-    # ブラウザの初期化
-    browser = Browser(
-        headless=headless_mode, 
-        user_data_dir=profile_path,
-        enable_default_extensions=False, # 組織ポリシー等で拡張機能インストールが制限される場合に備え無効化
-        # 操作の安定性を高めるための待機設定
-        wait_between_actions=1.0,         # 各アクション（クリック・入力など）の間に1秒待機
-        minimum_wait_page_load_time=2.0,  # ページロード時に最低2秒待機してDOMレンダリングを確実にする
-        # chrome_instance_path=None, # デフォルトのChromeを使用
-        # other args...
-    )
-
-
-
-
-    # Controller パターンを使用してカスタムアクション（ツール）を定義
+def create_controller(ask_user_fn):
     controller = Controller()
     
     @controller.action("ask_user")
@@ -191,8 +97,7 @@ async def main():
         MFAコード、認証コード、OTP、またはその他の情報を入力する必要がある場合にこのツールを使用してください。
         また、ログインなどの手動操作をユーザーに依頼する場合にも使用してください。
         """
-        print(f"\n\n[Agentからの質問]: {question}")
-        return input("回答を入力してください (入力後Enter): ")
+        return ask_user_fn(question)
 
     @controller.action("search_jira_issues")
     def search_jira_issues(jql: str):
@@ -239,8 +144,66 @@ async def main():
             return f"チケット {issue_key} の説明を更新しました。"
         except Exception as e:
             return f"Jira説明更新エラー: {e}"
+            
+    return controller
 
+async def generate_reflection(task_name, model_name, result, steps, current_dir, llm):
+    print("\n--- 振り返りを生成中 ---")
+    reflection_prompt = f"""
+    以下の観点で、今回のタスク『{task_name}』の実行プロセスを振り返り、簡潔にまとめてください：
+    1. **目的**: ループや知識不足による不要なステップを減らし、より少ないステップ数で効率的に要件を満たすこと。
+    2. **分析**: どの手順でつまずいたか、無駄な操作がなかったか。
+    3. **改善案**: 次回同様のタスクを行う際、プロンプトをどのように変更すれば、よりスムーズかつ短手順で完了できるか。（**現状で十分に効率的であれば、あえて改善案を挙げる必要はありません**）
+
+    実行履歴:
+    {result}
+    """
+    
+    try:
+        from langchain_core.messages import HumanMessage
+        reflection_content = await llm.ainvoke([HumanMessage(content=reflection_prompt)])
+        
+        if hasattr(reflection_content, 'content'):
+            reflection_text = reflection_content.content
+        elif hasattr(reflection_content, 'completion'):
+            reflection_text = reflection_content.completion
+        else:
+            reflection_text = str(reflection_content)
+        
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        reflection_entry = f"""
+## {timestamp} - {task_name}
+- **Model**: {model_name}
+- **Steps**: {steps}
+- **Reflection**:
+{reflection_text}
+"""
+        
+        reflection_file = os.path.join(current_dir, "REFLECTION.md")
+        with open(reflection_file, "a", encoding="utf-8") as f:
+            f.write(reflection_entry + "\n")
+            
+        print(f"振り返りを REFLECTION.md に保存しました。")
+        print(reflection_entry)
+    except Exception as e:
+        print(f"振り返りの生成または保存に失敗しました: {e}")
+
+async def run_sequence(tasks_to_run, llm, browser_profile_path, ask_user_fn, context_info="", pass_context=False, model_name="gemini-3-flash-preview"):
+    # ブラウザの仕様設定
+    use_browser = any(t.get('use_browser', True) for t in tasks_to_run)
+    headless_mode = not use_browser
+
+    browser = Browser(
+        headless=headless_mode, 
+        user_data_dir=browser_profile_path,
+        enable_default_extensions=False,
+        wait_between_actions=1.0,
+        minimum_wait_page_load_time=2.0,
+    )
+
+    controller = create_controller(ask_user_fn)
     previous_result = ""
+    current_dir = os.getcwd()
 
     try:
         for idx, current_task in enumerate(tasks_to_run):
@@ -257,80 +220,134 @@ async def main():
             if pass_context and idx > 0 and previous_result:
                 task_description += f"\n\n【前段タスクからの引き継ぎデータ】:\n{previous_result}"
                 
-            # エージェントの作成
             agent = Agent(
                 task=task_description,
                 llm=llm,
                 browser=browser,
                 controller=controller,
-                # 認識精度向上のための設定
-                use_vision=True,               # 画像認識を明示的に有効化
-                vision_detail_level="high",    # より高精細な画像をLLMに渡し、UI要素の認識精度を向上させる
-                use_thinking=True,             # LLMによるプランニングと推論を有効化
+                use_vision=True,
+                vision_detail_level="high",
+                use_thinking=True,
                 enable_planning=True
             )
 
-            # エージェントの実行
             print(f"\n[{idx+1}/{len(tasks_to_run)}] エージェントを実行中: {task_name}")
             history = await agent.run()
             
-            # 結果の表示
             print(f"\n--- {task_name} の実行結果 ---")
             result = history.final_result()
             print(result)
             previous_result = result
 
-            # 振り返りの自動生成と保存
-            print("\n--- 振り返りを生成中 ---")
-            
-            reflection_prompt = f"""
-            以下の観点で、今回のタスク『{task_name}』の実行プロセスを振り返り、簡潔にまとめてください：
-            1. **目的**: ループや知識不足による不要なステップを減らし、より少ないステップ数で効率的に要件を満たすこと。
-            2. **分析**: どの手順でつまずいたか、無駄な操作がなかったか。
-            3. **改善案**: 次回同様のタスクを行う際、プロンプトをどのように変更すれば、よりスムーズかつ短手順で完了できるか。（**現状で十分に効率的であれば、あえて改善案を挙げる必要はありません**）
-
-            実行履歴:
-            {result}
-            """
-            
             try:
-                from langchain_core.messages import HumanMessage
-                reflection_content = await llm.ainvoke([HumanMessage(content=reflection_prompt)])
-                
-                if hasattr(reflection_content, 'content'):
-                    reflection_text = reflection_content.content
-                elif hasattr(reflection_content, 'completion'):
-                    reflection_text = reflection_content.completion
-                else:
-                    reflection_text = str(reflection_content)
-                
-                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                try:
-                    step_count = len(history.history)
-                except Exception:
-                    step_count = "Unknown"
-                
-                reflection_entry = f"""
-## {timestamp} - {task_name}
-- **Model**: {model_name}
-- **Steps**: {step_count}
-- **Reflection**:
-{reflection_text}
-"""
-                
-                reflection_file = os.path.join(current_dir, "REFLECTION.md")
-                with open(reflection_file, "a", encoding="utf-8") as f:
-                    f.write(reflection_entry + "\n")
-                    
-                print(f"振り返りを REFLECTION.md に保存しました。")
-                print(reflection_entry)
+                step_count = len(history.history)
+            except Exception:
+                step_count = "Unknown"
 
-            except Exception as e:
-                print(f"振り返りの生成または保存に失敗しました: {e}")
-
+            await generate_reflection(task_name, model_name, result, step_count, current_dir, llm)
+            
+        return previous_result
     finally:
-        # ブラウザを確実に閉じる（Chromiumプロセスのリーク防止）
         await browser.close()
 
+# CLI対話モード
+def run_cli():
+    llm, model_name = initialize_llm()
+    tasks = load_tasks()
+    
+    if not tasks:
+        print("実行可能なタスクがありません。")
+        return
+
+    selected_task = None
+    
+    # CLI引数を確認
+    if len(sys.argv) > 1:
+        arg = sys.argv[1]
+        # 'cli' という引数はスキップする（run cli で起動された場合）
+        if arg.lower() != 'cli':
+            try:
+                idx = int(arg) - 1
+                if 0 <= idx < len(tasks):
+                    selected_task = tasks[idx]
+            except ValueError:
+                pass
+            
+    if selected_task:
+        print(f"CLI引数でタスクが選択されました: {selected_task.get('name')}")
+    else:
+        print("\n--- 実行可能タスク一覧 ---")
+        for i, t in enumerate(tasks):
+            print(f"{i + 1}. {t.get('name')} ({t.get('id')})")
+            print(f"   説明: {t.get('description')}")
+        print("-------------------------")
+
+        while True:
+            choice = input("実行したいタスクの番号を入力してください (qで終了): ")
+            if choice.lower() == 'q':
+                print("終了します。")
+                return
+            
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(tasks):
+                    selected_task = tasks[idx]
+                    break
+                else:
+                    print("無効な番号です。もう一度入力してください。")
+            except ValueError:
+                print("番号を入力してください。")
+
+    print(f"\n選択されたタスク: {selected_task.get('name')}")
+
+    context_info = ""
+    # 引数が 'cli' の場合は sys.argv[2:] が追加コンテキストになる
+    if len(sys.argv) > 1 and sys.argv[1].lower() == 'cli':
+        if len(sys.argv) > 2:
+            context_info = " ".join(sys.argv[2:])
+    elif len(sys.argv) > 2:
+        context_info = " ".join(sys.argv[2:])
+        
+    if context_info:
+        print(f"追加コンテキスト: {context_info}")
+
+    is_sequence = selected_task.get("type") == "sequence"
+    if is_sequence:
+        sequence_steps = selected_task.get("steps", [])
+        pass_context = selected_task.get("pass_context", False)
+        tasks_to_run = []
+        for step_id in sequence_steps:
+            step_task = next((t for t in tasks if t.get("id") == step_id), None)
+            if step_task:
+                tasks_to_run.append(step_task)
+            else:
+                print(f"エラー: Sequence に定義されたタスク '{step_id}' が見つかりません。")
+                return
+    else:
+        tasks_to_run = [selected_task]
+        pass_context = False
+
+    profile_path = os.path.join(os.getcwd(), "browser_profile")
+    os.makedirs(profile_path, exist_ok=True)
+    
+    # CLI 用の ask_user コールバック
+    def cli_ask_user(question):
+        print(f"\n\n[Agentからの質問]: {question}")
+        return input("回答を入力してください (入力後Enter): ")
+
+    try:
+        asyncio.run(run_sequence(
+            tasks_to_run=tasks_to_run,
+            llm=llm,
+            browser_profile_path=profile_path,
+            ask_user_fn=cli_ask_user,
+            context_info=context_info,
+            pass_context=pass_context,
+            model_name=model_name
+        ))
+    except KeyboardInterrupt:
+        print("\n中断されました。")
+        sys.exit(0)
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_cli()

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Local Assistant Console</title>
+    <link rel="stylesheet" href="/web/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- 巨大な全体ステータスヘッダー -->
+    <header id="status-header" class="status-idle">
+        <div class="status-indicator">
+            <span class="status-dot"></span>
+            <span id="status-text">待機中</span>
+        </div>
+        <div id="current-task-display" class="hidden"></div>
+    </header>
+
+    <main class="main-container">
+        <!-- 左側：タスク一覧と制御パネル -->
+        <section class="control-panel">
+            <h2>実行可能タスク</h2>
+            <div id="tasks-list" class="tasks-grid">
+                <!-- JavaScriptでタスクを動的に追加 -->
+            </div>
+            
+            <div class="context-input-container">
+                <label for="extra-context">追加コンテキスト（任意）</label>
+                <textarea id="extra-context" placeholder="タスク実行時に引き継ぐ情報があればここに入力します。"></textarea>
+            </div>
+        </section>
+
+        <!-- 右側：リアルタイムログコンソール -->
+        <section class="console-panel">
+            <h2>リアルタイムログ</h2>
+            <div id="console-output" class="console-box">
+                <div class="system-msg">ログ接続を待機中...</div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 入力待ち（MFA等）全画面オーバーレイ -->
+    <div id="asking-overlay" class="overlay hidden">
+        <div class="overlay-content">
+            <div class="warning-icon">⚠</div>
+            <h1>エージェントからの質問 / 入力要求</h1>
+            <p id="asking-question">認証コードを入力してください。</p>
+            <div class="overlay-input-group">
+                <input type="text" id="asking-input" placeholder="回答を入力してEnterキーを押す">
+                <button id="asking-submit-btn">回答を送信</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/web/app.js"></script>
+</body>
+</html>
