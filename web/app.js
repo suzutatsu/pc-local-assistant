@@ -38,6 +38,14 @@ async function fetchTasksSchedulesAndResults() {
     }
 }
 
+function translateDay(day) {
+    const days = {
+        'mon': '月曜', 'tue': '火曜', 'wed': '水曜', 'thu': '木曜',
+        'fri': '金曜', 'sat': '土曜', 'sun': '日曜'
+    };
+    return days[day] || day;
+}
+
 function renderTasks(tasks) {
     tasksList.innerHTML = '';
     if (!tasks || tasks.length === 0) {
@@ -50,20 +58,40 @@ function renderTasks(tasks) {
         let badgeHtml = '';
         let selectVal = 'none';
         let valInput = '';
+        let dayVal = 'mon';
         let showInputStyle = 'style="display:none;"';
+        let showDaySelectStyle = 'style="display:none;"';
         let placeholder = '';
 
         if (schedule) {
             selectVal = schedule.type;
-            valInput = schedule.value;
-            showInputStyle = '';
             
             if (schedule.type === 'daily') {
                 badgeHtml = `<span class="schedule-badge sched-badge-daily">⏱ 毎日 ${schedule.value}</span>`;
+                valInput = schedule.value;
                 placeholder = '例: 09:00';
+                showInputStyle = '';
+            } else if (schedule.type === 'weekly') {
+                const parts = schedule.value.split(' ');
+                dayVal = parts[0] || 'mon';
+                valInput = parts[1] || '';
+                badgeHtml = `<span class="schedule-badge sched-badge-interval">📅 毎週 (${translateDay(dayVal)}) ${valInput}</span>`;
+                placeholder = '例: 09:00';
+                showInputStyle = '';
+                showDaySelectStyle = '';
+            } else if (schedule.type === 'biweekly') {
+                const parts = schedule.value.split(' ');
+                dayVal = parts[0] || 'mon';
+                valInput = parts[1] || '';
+                badgeHtml = `<span class="schedule-badge sched-badge-interval">📅 隔週 (${translateDay(dayVal)}) ${valInput}</span>`;
+                placeholder = '例: 09:00';
+                showInputStyle = '';
+                showDaySelectStyle = '';
             } else if (schedule.type === 'interval') {
                 badgeHtml = `<span class="schedule-badge sched-badge-interval">⏳ ${schedule.value}時間ごと</span>`;
-                placeholder = '例: 3 (時間)';
+                valInput = schedule.value;
+                placeholder = '例: 3';
+                showInputStyle = '';
             }
         }
 
@@ -116,12 +144,29 @@ ${escapeHtml(taskResult.result)}
             <div class="schedule-config-area">
                 <div class="schedule-title-sm">定期実行スケジュールの設定</div>
                 <div class="schedule-form">
+                    <!-- タイプ選択 -->
                     <select class="schedule-select" data-id="${task.id}">
                         <option value="none" ${selectVal === 'none' ? 'selected' : ''}>なし (手動のみ)</option>
                         <option value="daily" ${selectVal === 'daily' ? 'selected' : ''}>毎日指定時刻</option>
+                        <option value="weekly" ${selectVal === 'weekly' ? 'selected' : ''}>毎週指定曜日</option>
+                        <option value="biweekly" ${selectVal === 'biweekly' ? 'selected' : ''}>隔週指定曜日</option>
                         <option value="interval" ${selectVal === 'interval' ? 'selected' : ''}>時間おき</option>
                     </select>
+                    
+                    <!-- 曜日選択 (毎週・隔週用) -->
+                    <select class="schedule-day-select" data-id="${task.id}" ${showDaySelectStyle}>
+                        <option value="mon" ${dayVal === 'mon' ? 'selected' : ''}>月曜日</option>
+                        <option value="tue" ${dayVal === 'tue' ? 'selected' : ''}>火曜日</option>
+                        <option value="wed" ${dayVal === 'wed' ? 'selected' : ''}>水曜日</option>
+                        <option value="thu" ${dayVal === 'thu' ? 'selected' : ''}>木曜日</option>
+                        <option value="fri" ${dayVal === 'fri' ? 'selected' : ''}>金曜日</option>
+                        <option value="sat" ${dayVal === 'sat' ? 'selected' : ''}>土曜日</option>
+                        <option value="sun" ${dayVal === 'sun' ? 'selected' : ''}>日曜日</option>
+                    </select>
+                    
+                    <!-- 時刻/間隔の数値入力 -->
                     <input type="text" class="schedule-val-input" data-id="${task.id}" value="${valInput}" placeholder="${placeholder}" ${showInputStyle}>
+                    
                     <button class="schedule-save-btn" data-id="${task.id}">保存</button>
                     ${schedule ? `<button class="schedule-delete-btn" data-id="${task.id}">解除</button>` : ''}
                 </div>
@@ -139,13 +184,21 @@ ${escapeHtml(taskResult.result)}
     document.querySelectorAll('.schedule-select').forEach(select => {
         select.addEventListener('change', (e) => {
             const taskId = select.getAttribute('data-id');
+            const daySelect = document.querySelector(`.schedule-day-select[data-id="${taskId}"]`);
             const input = document.querySelector(`.schedule-val-input[data-id="${taskId}"]`);
             const val = e.target.value;
             
             if (val === 'none') {
+                daySelect.style.display = 'none';
                 input.style.display = 'none';
                 input.value = '';
+            } else if (val === 'weekly' || val === 'biweekly') {
+                daySelect.style.display = 'inline-block';
+                input.style.display = 'inline-block';
+                input.placeholder = '例: 09:00';
+                input.focus();
             } else {
+                daySelect.style.display = 'none';
                 input.style.display = 'inline-block';
                 input.placeholder = val === 'daily' ? '例: 09:00' : '例: 3 (時間)';
                 input.focus();
@@ -188,14 +241,21 @@ function escapeHtml(str) {
 // スケジュール保存
 async function saveSchedule(taskId) {
     const select = document.querySelector(`.schedule-select[data-id="${taskId}"]`);
+    const daySelect = document.querySelector(`.schedule-day-select[data-id="${taskId}"]`);
     const input = document.querySelector(`.schedule-val-input[data-id="${taskId}"]`);
     
     const type = select.value;
-    const value = input.value.trim();
+    let value = input.value.trim();
     
     if (type !== 'none' && !value) {
         alert('実行時刻または時間間隔を入力してください。');
         return;
+    }
+
+    // 毎週・隔週の場合は曜日コードと時刻を結合
+    if (type === 'weekly' || type === 'biweekly') {
+        const day = daySelect.value;
+        value = `${day} ${value}`;
     }
 
     try {
@@ -312,7 +372,6 @@ function handleSocketMessage(msg) {
         const { status, current_task, ask_question, queue_list } = msg.data;
         updateUIState(status, current_task, ask_question, queue_list);
     } else if (msg.type === 'task_result') {
-        // エージェントが実行完了またはエラー終了した際、最終結果をリアルタイム反映
         const { task_id, status, timestamp, result } = msg.data;
         currentResults[task_id] = { status, timestamp, result };
         updateTaskCardResult(task_id, status, timestamp, result);

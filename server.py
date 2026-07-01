@@ -230,6 +230,25 @@ def save_result_to_file(task_id: str, status: str, result_text: str):
         print(f"結果ファイル保存エラー: {e}")
 
 async def scheduled_task_job(task_id: str):
+    schedules = load_schedules_from_file()
+    sched = schedules.get(task_id, {})
+    sched_type = sched.get("type")
+    
+    if sched_type == "biweekly":
+        # 隔週の判定: results.json から最後の実行時刻を取得し、13日未満ならスキップ
+        results = load_results_from_file()
+        last_run = results.get(task_id)
+        if last_run and last_run.get("timestamp"):
+            try:
+                last_time = datetime.datetime.strptime(last_run["timestamp"], "%Y-%m-%d %H:%M:%S")
+                delta = datetime.datetime.now() - last_time
+                if delta.days < 13:
+                    state.add_log(f"[スケジュールスキップ]: タスク {task_id} は隔週設定ですが、前回実行（{last_run['timestamp']}）から2週間経過していないためスキップします。")
+                    return
+            except Exception as e:
+                # 解析に失敗した場合は念のため実行する
+                pass
+
     state.add_log(f"[スケジュール起動]: タスク {task_id} の自動実行時刻になりました。")
     await enqueue_task(task_id)
 
@@ -249,6 +268,21 @@ def apply_schedule_to_scheduler(task_id: str, sched_type: str, value: Any):
             return True
         except Exception as e:
             state.add_log(f"エラー: 定期実行設定(daily)の解析に失敗しました ({value}): {e}")
+    elif sched_type == "weekly" or sched_type == "biweekly":
+        # value: "mon 09:00" など
+        try:
+            day_of_week, time_str = value.split()
+            hour, minute = map(int, time_str.split(":"))
+            # 隔週(biweekly)の場合も、実行自体は毎週同じ曜日/時刻にトリガーさせ、ジョブ内でスキップ判定を行う
+            scheduler.add_job(
+                scheduled_task_job,
+                CronTrigger(day_of_week=day_of_week, hour=hour, minute=minute),
+                id=task_id,
+                args=[task_id]
+            )
+            return True
+        except Exception as e:
+            state.add_log(f"エラー: 定期実行設定({sched_type})の解析に失敗しました ({value}): {e}")
     elif sched_type == "interval":
         try:
             hours = int(value)
