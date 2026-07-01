@@ -103,6 +103,7 @@ body {
     background-color: #ffffff;
     max-width: 60%;
     padding: 24px;
+    overflow-y: auto;
 }
 
 .right-panel {
@@ -136,17 +137,18 @@ h2 {
     padding-bottom: 8px;
 }
 
-/* タスク一覧：多タスク対応の2列グリッド */
+/* タスク一覧：カテゴリごとに横一列に並べる（スクロールレール） */
 .tasks-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    display: flex;
+    flex-direction: row;
     gap: 12px;
-    flex: 1;
-    overflow-y: auto;
-    padding-right: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 4px 4px 12px 4px;
+    width: 100%;
 }
 
-/* タスクカード（コンパクト化） */
+/* タスクカード（横並び用に幅固定） */
 .task-card {
     border: 2px solid #e4e4e7;
     border-radius: 12px;
@@ -157,6 +159,9 @@ h2 {
     gap: 8px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    flex: 0 0 280px;
+    width: 280px;
+    box-sizing: border-box;
 }
 
 .task-card:hover {
