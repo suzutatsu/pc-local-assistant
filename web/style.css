@@ -581,5 +581,25 @@ h2 {
     overflow-y: auto;
 }
 
+/* カテゴリセクション */
+.category-section {
+    margin-bottom: 24px;
+}
+
+.category-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: #71717a;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #f4f4f5;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+
 
 

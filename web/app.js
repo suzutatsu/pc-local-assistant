@@ -17,7 +17,7 @@ const askingSubmitBtn = document.getElementById('asking-submit-btn');
 let socket;
 let currentStatus = 'idle';
 let currentSchedules = {};
-let currentResults = []; // リスト形式の履歴に変更
+let currentResults = []; // リスト形式の履歴
 let allTasks = []; // タスク一覧の保持用
 
 // APIからタスク一覧、スケジュール一覧、実行結果一覧を取得して表示
@@ -50,102 +50,142 @@ function translateDay(day) {
     return days[day] || day;
 }
 
-// 左側：タスク一覧（手動起動とスケジュール設定のみ）の描画
+// 左側：タスク一覧（カテゴリ別グループ化表示）の描画
 function renderTasks(tasks) {
     tasksList.innerHTML = '';
     if (!tasks || tasks.length === 0) {
         tasksList.innerHTML = '<p>実行可能なタスクが定義されていません。</p>';
         return;
     }
-    
+
+    // カテゴリごとのグループ化
+    const categoriesMap = {};
     tasks.forEach(task => {
-        const schedule = currentSchedules[task.id];
-        let badgeHtml = '';
-        let selectVal = 'none';
-        let valInput = '';
-        let dayVal = 'mon';
-        let showInputStyle = 'style="display:none;"';
-        let showDaySelectStyle = 'style="display:none;"';
-        let placeholder = '';
-
-        if (schedule) {
-            selectVal = schedule.type;
-            
-            if (schedule.type === 'daily') {
-                badgeHtml = `<span class="schedule-badge sched-badge-daily">⏱ 毎日 ${schedule.value}</span>`;
-                valInput = schedule.value;
-                placeholder = '例: 09:00';
-                showInputStyle = '';
-            } else if (schedule.type === 'weekly') {
-                const parts = schedule.value.split(' ');
-                dayVal = parts[0] || 'mon';
-                valInput = parts[1] || '';
-                badgeHtml = `<span class="schedule-badge sched-badge-interval">📅 毎週 (${translateDay(dayVal)}) ${valInput}</span>`;
-                placeholder = '例: 09:00';
-                showInputStyle = '';
-                showDaySelectStyle = '';
-            } else if (schedule.type === 'biweekly') {
-                const parts = schedule.value.split(' ');
-                dayVal = parts[0] || 'mon';
-                valInput = parts[1] || '';
-                badgeHtml = `<span class="schedule-badge sched-badge-interval">📅 隔週 (${translateDay(dayVal)}) ${valInput}</span>`;
-                placeholder = '例: 09:00';
-                showInputStyle = '';
-                showDaySelectStyle = '';
-            } else if (schedule.type === 'interval') {
-                badgeHtml = `<span class="schedule-badge sched-badge-interval">⏳ ${schedule.value}時間ごと</span>`;
-                valInput = schedule.value;
-                placeholder = '例: 3';
-                showInputStyle = '';
-            }
+        const cat = task.category || 'カテゴリなし';
+        if (!categoriesMap[cat]) {
+            categoriesMap[cat] = [];
         }
+        categoriesMap[cat].push(task);
+    });
 
-        const card = document.createElement('div');
-        card.className = 'task-card';
-        card.innerHTML = `
-            <div class="task-info">
-                <h3>${task.name}${badgeHtml}</h3>
-                <p>${task.description || '説明なし'}</p>
-            </div>
-            
-            <!-- アクションエリア -->
-            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                <button class="run-btn" data-id="${task.id}">タスクを実行</button>
-                <button class="toggle-schedule-btn" data-id="${task.id}">📅 スケジュール設定</button>
-            </div>
-            
-            <!-- 定期実行設定フォーム（デフォルト非表示） -->
-            <div class="schedule-config-area" id="schedule-config-area-${task.id}" style="display:none;">
-                <div class="schedule-form">
-                    <!-- タイプ選択 -->
-                    <select class="schedule-select" data-id="${task.id}">
-                        <option value="none" ${selectVal === 'none' ? 'selected' : ''}>なし (手動のみ)</option>
-                        <option value="daily" ${selectVal === 'daily' ? 'selected' : ''}>毎日指定時刻</option>
-                        <option value="weekly" ${selectVal === 'weekly' ? 'selected' : ''}>毎週指定曜日</option>
-                        <option value="biweekly" ${selectVal === 'biweekly' ? 'selected' : ''}>隔週指定曜日</option>
-                        <option value="interval" ${selectVal === 'interval' ? 'selected' : ''}>時間おき</option>
-                    </select>
-                    
-                    <!-- 曜日選択 (毎週・隔週用) -->
-                    <select class="schedule-day-select" data-id="${task.id}" ${showDaySelectStyle}>
-                        <option value="mon" ${dayVal === 'mon' ? 'selected' : ''}>月曜日</option>
-                        <option value="tue" ${dayVal === 'tue' ? 'selected' : ''}>火曜日</option>
-                        <option value="wed" ${dayVal === 'wed' ? 'selected' : ''}>水曜日</option>
-                        <option value="thu" ${dayVal === 'thu' ? 'selected' : ''}>木曜日</option>
-                        <option value="fri" ${dayVal === 'fri' ? 'selected' : ''}>金曜日</option>
-                        <option value="sat" ${dayVal === 'sat' ? 'selected' : ''}>土曜日</option>
-                        <option value="sun" ${dayVal === 'sun' ? 'selected' : ''}>日曜日</option>
-                    </select>
-                    
-                    <!-- 時刻/間隔の数値入力 -->
-                    <input type="text" class="schedule-val-input" data-id="${task.id}" value="${valInput}" placeholder="${placeholder}" ${showInputStyle}>
-                    
-                    <button class="schedule-save-btn" data-id="${task.id}">保存</button>
-                    ${schedule ? `<button class="schedule-delete-btn" data-id="${task.id}">解除</button>` : ''}
+    // カテゴリ名のソート（'カテゴリなし' は最後にする）
+    const sortedCategories = Object.keys(categoriesMap).sort((a, b) => {
+        if (a === 'カテゴリなし') return 1;
+        if (b === 'カテゴリなし') return -1;
+        return a.localeCompare(b, 'ja');
+    });
+
+    // カテゴリごとに描画
+    sortedCategories.forEach(catName => {
+        const catTasks = categoriesMap[catName];
+        
+        // カテゴリセクションコンテナ
+        const section = document.createElement('div');
+        section.className = 'category-section';
+
+        // カテゴリタイトル
+        const icon = catName === 'カテゴリなし' ? '📦' : '📁';
+        const title = document.createElement('h3');
+        title.className = 'category-title';
+        title.innerHTML = `<span>${icon}</span> ${catName}`;
+        section.appendChild(title);
+
+        // カテゴリ内のタスクグリッド
+        const grid = document.createElement('div');
+        grid.className = 'tasks-grid';
+
+        catTasks.forEach(task => {
+            const schedule = currentSchedules[task.id];
+            let badgeHtml = '';
+            let selectVal = 'none';
+            let valInput = '';
+            let dayVal = 'mon';
+            let showInputStyle = 'style="display:none;"';
+            let showDaySelectStyle = 'style="display:none;"';
+            let placeholder = '';
+
+            if (schedule) {
+                selectVal = schedule.type;
+                
+                if (schedule.type === 'daily') {
+                    badgeHtml = `<span class="schedule-badge sched-badge-daily">⏱ 毎日 ${schedule.value}</span>`;
+                    valInput = schedule.value;
+                    placeholder = '例: 09:00';
+                    showInputStyle = '';
+                } else if (schedule.type === 'weekly') {
+                    const parts = schedule.value.split(' ');
+                    dayVal = parts[0] || 'mon';
+                    valInput = parts[1] || '';
+                    badgeHtml = `<span class="schedule-badge sched-badge-interval">📅 毎週 (${translateDay(dayVal)}) ${valInput}</span>`;
+                    placeholder = '例: 09:00';
+                    showInputStyle = '';
+                    showDaySelectStyle = '';
+                } else if (schedule.type === 'biweekly') {
+                    const parts = schedule.value.split(' ');
+                    dayVal = parts[0] || 'mon';
+                    valInput = parts[1] || '';
+                    badgeHtml = `<span class="schedule-badge sched-badge-interval">📅 隔週 (${translateDay(dayVal)}) ${valInput}</span>`;
+                    placeholder = '例: 09:00';
+                    showInputStyle = '';
+                    showDaySelectStyle = '';
+                } else if (schedule.type === 'interval') {
+                    badgeHtml = `<span class="schedule-badge sched-badge-interval">⏳ ${schedule.value}時間ごと</span>`;
+                    valInput = schedule.value;
+                    placeholder = '例: 3';
+                    showInputStyle = '';
+                }
+            }
+
+            const card = document.createElement('div');
+            card.className = 'task-card';
+            card.innerHTML = `
+                <div class="task-info">
+                    <h3>${task.name}${badgeHtml}</h3>
+                    <p>${task.description || '説明なし'}</p>
                 </div>
-            </div>
-        `;
-        tasksList.appendChild(card);
+                
+                <!-- アクションエリア -->
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <button class="run-btn" data-id="${task.id}">タスクを実行</button>
+                    <button class="toggle-schedule-btn" data-id="${task.id}">📅 スケジュール設定</button>
+                </div>
+                
+                <!-- 定期実行設定フォーム（デフォルト非表示） -->
+                <div class="schedule-config-area" id="schedule-config-area-${task.id}" style="display:none;">
+                    <div class="schedule-form">
+                        <!-- タイプ選択 -->
+                        <select class="schedule-select" data-id="${task.id}">
+                            <option value="none" ${selectVal === 'none' ? 'selected' : ''}>なし (手動のみ)</option>
+                            <option value="daily" ${selectVal === 'daily' ? 'selected' : ''}>毎日指定時刻</option>
+                            <option value="weekly" ${selectVal === 'weekly' ? 'selected' : ''}>毎週指定曜日</option>
+                            <option value="biweekly" ${selectVal === 'biweekly' ? 'selected' : ''}>隔週指定曜日</option>
+                            <option value="interval" ${selectVal === 'interval' ? 'selected' : ''}>時間おき</option>
+                        </select>
+                        
+                        <!-- 曜日選択 (毎週・隔週用) -->
+                        <select class="schedule-day-select" data-id="${task.id}" ${showDaySelectStyle}>
+                            <option value="mon" ${dayVal === 'mon' ? 'selected' : ''}>月曜日</option>
+                            <option value="tue" ${dayVal === 'tue' ? 'selected' : ''}>火曜日</option>
+                            <option value="wed" ${dayVal === 'wed' ? 'selected' : ''}>水曜日</option>
+                            <option value="thu" ${dayVal === 'thu' ? 'selected' : ''}>木曜日</option>
+                            <option value="fri" ${dayVal === 'fri' ? 'selected' : ''}>金曜日</option>
+                            <option value="sat" ${dayVal === 'sat' ? 'selected' : ''}>土曜日</option>
+                            <option value="sun" ${dayVal === 'sun' ? 'selected' : ''}>日曜日</option>
+                        </select>
+                        
+                        <!-- 時刻/間隔の数値入力 -->
+                        <input type="text" class="schedule-val-input" data-id="${task.id}" value="${valInput}" placeholder="${placeholder}" ${showInputStyle}>
+                        
+                        <button class="schedule-save-btn" data-id="${task.id}">保存</button>
+                        ${schedule ? `<button class="schedule-delete-btn" data-id="${task.id}">解除</button>` : ''}
+                    </div>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+
+        section.appendChild(grid);
+        tasksList.appendChild(section);
     });
     
     // イベントリスナーの追加
