@@ -108,12 +108,14 @@ function renderTasks(tasks) {
                 <p>${task.description || '説明なし'}</p>
             </div>
             
-            <!-- 実行ボタン -->
-            <button class="run-btn" data-id="${task.id}">タスクを実行</button>
+            <!-- アクションエリア -->
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <button class="run-btn" data-id="${task.id}">タスクを実行</button>
+                <button class="toggle-schedule-btn" data-id="${task.id}">📅 スケジュール設定</button>
+            </div>
             
-            <!-- 定期実行設定フォーム -->
-            <div class="schedule-config-area">
-                <div class="schedule-title-sm">定期実行スケジュールの設定</div>
+            <!-- 定期実行設定フォーム（デフォルト非表示） -->
+            <div class="schedule-config-area" id="schedule-config-area-${task.id}" style="display:none;">
                 <div class="schedule-form">
                     <!-- タイプ選択 -->
                     <select class="schedule-select" data-id="${task.id}">
@@ -149,6 +151,10 @@ function renderTasks(tasks) {
     // イベントリスナーの追加
     document.querySelectorAll('.run-btn').forEach(btn => {
         btn.addEventListener('click', () => runTask(btn.getAttribute('data-id')));
+    });
+
+    document.querySelectorAll('.toggle-schedule-btn').forEach(btn => {
+        btn.addEventListener('click', () => toggleScheduleForm(btn.getAttribute('data-id')));
     });
 
     // スケジュール設定のイベント制御
@@ -188,6 +194,16 @@ function renderTasks(tasks) {
     updateButtonStates();
 }
 
+// スケジュール設定アコーディオンの開閉トグル
+function toggleScheduleForm(taskId) {
+    const area = document.getElementById(`schedule-config-area-${taskId}`);
+    if (area.style.display === 'none') {
+        area.style.display = 'block';
+    } else {
+        area.style.display = 'none';
+    }
+}
+
 // 右上：タスク最終回答一覧の描画
 function renderFinalResults(tasks) {
     resultsList.innerHTML = '';
@@ -196,7 +212,6 @@ function renderFinalResults(tasks) {
         return;
     }
 
-    // 過去結果が存在するタスク、または未実行のタスクを並べる
     tasks.forEach(task => {
         const result = currentResults[task.id];
         const card = document.createElement('div');
