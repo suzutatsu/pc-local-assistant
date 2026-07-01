@@ -217,7 +217,7 @@ async def execute_agent_task(task_id: str, context_info: str):
         state.broadcast_status()
 
 @app.post("/api/tasks/run")
-def run_task(req: TaskRunRequest):
+async def run_task(req: TaskRunRequest):
     if state.status == "running" or state.status == "asking":
         raise HTTPException(status_code=400, detail="別のタスクが実行中です。")
     
@@ -228,7 +228,7 @@ class RespondRequest(BaseModel):
     answer: str
 
 @app.post("/api/ask_user/respond")
-def respond_to_agent(req: RespondRequest):
+async def respond_to_agent(req: RespondRequest):
     if state.status != "asking":
         raise HTTPException(status_code=400, detail="現在エージェントは入力を求めていません。")
     
