@@ -205,24 +205,39 @@ def save_schedules_to_file(schedules: Dict[str, Any]):
         print(f"スケジュールファイル保存エラー: {e}")
 
 # ==================== 実行結果の永続化 ====================
-def load_results_from_file() -> Dict[str, Any]:
+def load_results_from_file() -> List[Dict[str, Any]]:
     if not os.path.exists(RESULTS_FILE):
-        return {}
+        return []
     try:
         with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+            return data if isinstance(data, list) else []
     except Exception as e:
         print(f"結果ファイル読み込みエラー: {e}")
-        return {}
+        return []
 
 def save_result_to_file(task_id: str, status: str, result_text: str):
     results = load_results_from_file()
+    
+    tasks = load_tasks()
+    selected_task = next((t for t in tasks if t.get("id") == task_id), None)
+    task_name = selected_task.get("name") if selected_task else task_id
+    
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    results[task_id] = {
+    new_result = {
+        "task_id": task_id,
+        "task_name": task_name,
         "status": status,
         "timestamp": timestamp,
         "result": result_text
     }
+    
+    # 先頭に追加（最新順）
+    results.insert(0, new_result)
+    
+    # 履歴件数を50件に制限
+    results = results[:50]
+    
     try:
         with open(RESULTS_FILE, 'w', encoding='utf-8') as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
@@ -235,9 +250,9 @@ async def scheduled_task_job(task_id: str):
     sched_type = sched.get("type")
     
     if sched_type == "biweekly":
-        # 隔週の判定: results.json から最後の実行時刻を取得し、13日未満ならスキップ
+        # 隔週の判定: results.json（リスト）から該当タスクの最新の実行結果を探す
         results = load_results_from_file()
-        last_run = results.get(task_id)
+        last_run = next((r for r in results if r.get("task_id") == task_id), None)
         if last_run and last_run.get("timestamp"):
             try:
                 last_time = datetime.datetime.strptime(last_run["timestamp"], "%Y-%m-%d %H:%M:%S")
@@ -420,11 +435,13 @@ async def execute_agent_task(task_id: str, context_info: str):
         save_result_to_file(task_id, "success", final_res)
         
         # クライアントへ最終結果をブロードキャスト
+        task_name = selected_task.get("name") if selected_task else task_id
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         asyncio.create_task(state.broadcast({
             "type": "task_result",
             "data": {
                 "task_id": task_id,
+                "task_name": task_name,
                 "status": "success",
                 "timestamp": timestamp,
                 "result": final_res
@@ -438,11 +455,16 @@ async def execute_agent_task(task_id: str, context_info: str):
         error_msg = f"システムエラー: {e}"
         save_result_to_file(task_id, "failed", error_msg)
         
+        tasks = load_tasks()
+        selected_task = next((t for t in tasks if t.get("id") == task_id), None)
+        task_name = selected_task.get("name") if selected_task else task_id
+        
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         asyncio.create_task(state.broadcast({
             "type": "task_result",
             "data": {
                 "task_id": task_id,
+                "task_name": task_name,
                 "status": "failed",
                 "timestamp": timestamp,
                 "result": error_msg

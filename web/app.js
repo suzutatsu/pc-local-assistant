@@ -17,7 +17,7 @@ const askingSubmitBtn = document.getElementById('asking-submit-btn');
 let socket;
 let currentStatus = 'idle';
 let currentSchedules = {};
-let currentResults = {};
+let currentResults = []; // リスト形式の履歴に変更
 let allTasks = []; // タスク一覧の保持用
 
 // APIからタスク一覧、スケジュール一覧、実行結果一覧を取得して表示
@@ -32,10 +32,10 @@ async function fetchTasksSchedulesAndResults() {
         const tasksData = await tasksRes.json();
         allTasks = tasksData.tasks || [];
         currentSchedules = await schedulesRes.json();
-        currentResults = await resultsRes.json();
+        currentResults = await resultsRes.json(); // リスト形式
         
         renderTasks(allTasks);
-        renderFinalResults(allTasks);
+        renderFinalResults();
     } catch (err) {
         console.error('データの取得に失敗しました:', err);
         consoleOutput.innerHTML = `<div class="system-msg" style="color: #ef4444;">APIサーバーとの通信に失敗しました。サーバーが起動しているか確認してください。</div>`;
@@ -204,44 +204,32 @@ function toggleScheduleForm(taskId) {
     }
 }
 
-// 右上：タスク最終回答一覧の描画
-function renderFinalResults(tasks) {
+// 右上：タスク最終回答一覧の描画（最近実行した時系列順）
+function renderFinalResults() {
     resultsList.innerHTML = '';
-    if (!tasks || tasks.length === 0) {
-        resultsList.innerHTML = '<div class="system-msg">タスクが定義されていません。</div>';
+    if (!currentResults || currentResults.length === 0) {
+        resultsList.innerHTML = '<div class="system-msg" style="color: #71717a; font-style: italic;">まだタスクの実行結果はありません。</div>';
         return;
     }
 
-    tasks.forEach(task => {
-        const result = currentResults[task.id];
+    currentResults.forEach(item => {
         const card = document.createElement('div');
         card.className = 'result-card';
-        card.setAttribute('data-id', task.id);
         
-        if (result) {
-            const isSuccess = result.status === 'success';
-            const statusClass = isSuccess ? 'result-status-success' : 'result-status-failed';
-            const statusText = isSuccess ? '成功' : '失敗';
-            
-            card.innerHTML = `
-                <div class="result-card-header">
-                    <span class="result-card-title">${task.name}</span>
-                    <div>
-                        <span style="margin-right: 8px; font-weight: normal; color: #71717a;">${result.timestamp}</span>
-                        <span class="result-status-indicator ${statusClass}">${statusText}</span>
-                    </div>
+        const isSuccess = item.status === 'success';
+        const statusClass = isSuccess ? 'result-status-success' : 'result-status-failed';
+        const statusText = isSuccess ? '成功' : '失敗';
+        
+        card.innerHTML = `
+            <div class="result-card-header">
+                <span class="result-card-title">${item.task_name || item.task_id}</span>
+                <div>
+                    <span style="margin-right: 8px; font-weight: normal; color: #71717a;">${item.timestamp}</span>
+                    <span class="result-status-indicator ${statusClass}">${statusText}</span>
                 </div>
-                <div class="result-card-body">${escapeHtml(result.result)}</div>
-            `;
-        } else {
-            card.innerHTML = `
-                <div class="result-card-header">
-                    <span class="result-card-title">${task.name}</span>
-                    <span class="result-status-indicator" style="background-color: #f4f4f5; color: #71717a;">未実行</span>
-                </div>
-                <div class="result-card-body" style="color: #a1a1aa; font-style: italic;">まだタスクが実行されていません。</div>
-            `;
-        }
+            </div>
+            <div class="result-card-body">${escapeHtml(item.result)}</div>
+        `;
         resultsList.appendChild(card);
     });
 }
@@ -380,48 +368,26 @@ function handleSocketMessage(msg) {
         }
         
         if (results) {
-            currentResults = results;
+            currentResults = results; // リスト形式の履歴
         }
         
         updateUIState(status, current_task, ask_question, queue_list);
-        renderFinalResults(allTasks);
+        renderFinalResults();
     } else if (msg.type === 'log') {
         appendLog(msg.data);
     } else if (msg.type === 'status') {
         const { status, current_task, ask_question, queue_list } = msg.data;
         updateUIState(status, current_task, ask_question, queue_list);
     } else if (msg.type === 'task_result') {
-        const { task_id, status, timestamp, result } = msg.data;
-        currentResults[task_id] = { status, timestamp, result };
-        
-        // 右上の最終結果一覧の該当カードをリアルタイム更新
-        updateResultCardDOM(task_id, status, timestamp, result);
+        // 新規結果を履歴リストの先頭に追加
+        currentResults.unshift(msg.data);
+        // 件数を50件に制限
+        if (currentResults.length > 50) {
+            currentResults = currentResults.slice(0, 50);
+        }
+        // 再描画
+        renderFinalResults();
     }
-}
-
-// 特定の結果カードDOMを直接更新
-function updateResultCardDOM(taskId, status, timestamp, result) {
-    const card = document.querySelector(`.result-card[data-id="${taskId}"]`);
-    if (!card) return;
-
-    const isSuccess = status === 'success';
-    const statusClass = isSuccess ? 'result-status-success' : 'result-status-failed';
-    const statusText = isSuccess ? '成功' : '失敗';
-
-    // 対象タスクのタイトルを取得
-    const task = allTasks.find(t => t.id === taskId);
-    const taskName = task ? task.name : taskId;
-
-    card.innerHTML = `
-        <div class="result-card-header">
-            <span class="result-card-title">${taskName}</span>
-            <div>
-                <span style="margin-right: 8px; font-weight: normal; color: #71717a;">${timestamp}</span>
-                <span class="result-status-indicator ${statusClass}">${statusText}</span>
-            </div>
-        </div>
-        <div class="result-card-body">${escapeHtml(result)}</div>
-    `;
 }
 
 // ステータスに応じたUIのアップデート
