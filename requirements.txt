@@ -8,3 +8,4 @@ jira==3.10.5
 pyobjc-framework-Cocoa
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
+apscheduler>=3.10.0

@@ -1,11 +1,16 @@
 import os
 import sys
 import asyncio
+import json
+import datetime
 from typing import List, Dict, Any
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 # main.py からインポート
 from main import load_tasks, initialize_llm, run_sequence
@@ -23,6 +28,9 @@ class AppState:
         self.current_task = None
         self.log_history = []
         self.max_log_history = 200
+        
+        # 実行待ちキューのリスト
+        self.queue_list = []  # List[Dict[str, Any]]: [{"task_id": "...", "name": "...", "context_info": "..."}]
         
         # ask_user 同期用
         self.ask_event = asyncio.Event()
@@ -45,28 +53,45 @@ class AppState:
         if len(self.log_history) > self.max_log_history:
             self.log_history.pop(0)
             
-        asyncio.create_task(self.broadcast({"type": "log", "data": cleaned_msg}))
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.broadcast({"type": "log", "data": cleaned_msg}))
+        except RuntimeError:
+            pass
 
     def broadcast_status(self):
-        asyncio.create_task(self.broadcast({
-            "type": "status",
-            "data": {
-                "status": self.status,
-                "current_task": self.current_task,
-                "ask_question": self.ask_question
-            }
-        }))
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.broadcast({
+                "type": "status",
+                "data": {
+                    "status": self.status,
+                    "current_task": self.current_task,
+                    "ask_question": self.ask_question,
+                    "queue_list": self.queue_list
+                }
+            }))
+        except RuntimeError:
+            pass
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+        
+        # スケジュールと実行結果も初期化時に送信
+        schedules = load_schedules_from_file()
+        results = load_results_from_file()
+        
         await websocket.send_json({
             "type": "init",
             "data": {
                 "status": self.status,
                 "current_task": self.current_task,
                 "ask_question": self.ask_question,
-                "log_history": self.log_history
+                "log_history": self.log_history,
+                "queue_list": self.queue_list,
+                "schedules": schedules,
+                "results": results
             }
         })
 
@@ -92,7 +117,6 @@ class StdoutRedirector:
     def write(self, message):
         self.original_stream.write(message)
         self.original_stream.flush()
-        # メッセージがただの改行コードのみでないかチェック
         if message and message != '\n':
             self.callback(message)
 
@@ -105,6 +129,159 @@ class StdoutRedirector:
 # sys.stdout と sys.stderr のリダイレクト設定
 sys.stdout = StdoutRedirector(sys.stdout, state.add_log)
 sys.stderr = StdoutRedirector(sys.stderr, state.add_log)
+
+# ==================== 非同期キューとワーカー ====================
+task_queue = asyncio.Queue()
+
+async def enqueue_task(task_id: str, context_info: str = ""):
+    # 既にキューにあるか確認
+    if any(item["task_id"] == task_id for item in state.queue_list):
+        state.add_log(f"通知: タスク {task_id} はすでに実行待ちキューに存在するため、追加をスキップしました。")
+        return False
+        
+    # 現在実行中のタスクと同じ場合もスキップ（二重実行防止）
+    tasks = load_tasks()
+    selected_task = next((t for t in tasks if t.get("id") == task_id), None)
+    if not selected_task:
+        state.add_log(f"エラー: タスク {task_id} が見つかりません。")
+        return False
+        
+    if state.current_task == selected_task.get("name"):
+        state.add_log(f"通知: タスク {selected_task.get('name')} は現在実行中のため、追加をスキップしました。")
+        return False
+
+    item = {
+        "task_id": task_id,
+        "name": selected_task.get("name"),
+        "context_info": context_info
+    }
+    state.queue_list.append(item)
+    state.broadcast_status()
+    
+    await task_queue.put(item)
+    state.add_log(f"タスクをキューに追加しました: {selected_task.get('name')}")
+    return True
+
+async def task_worker():
+    state.add_log("実行待ちキュー監視ワーカーを起動しました。")
+    while True:
+        try:
+            item = await task_queue.get()
+            task_id = item["task_id"]
+            context_info = item["context_info"]
+            
+            # キューリストから削除
+            state.queue_list = [i for i in state.queue_list if i["task_id"] != task_id]
+            state.broadcast_status()
+            
+            # タスクを実行
+            await execute_agent_task(task_id, context_info)
+            
+            task_queue.task_done()
+        except Exception as e:
+            state.add_log(f"ワーカー内部エラー: {e}")
+            await asyncio.sleep(2)
+
+# ==================== スケジューラーと永続化 ====================
+scheduler = AsyncIOScheduler()
+SCHEDULES_FILE = os.path.join(CURRENT_DIR, "schedules.json")
+RESULTS_FILE = os.path.join(CURRENT_DIR, "results.json")
+
+def load_schedules_from_file() -> Dict[str, Any]:
+    if not os.path.exists(SCHEDULES_FILE):
+        return {}
+    try:
+        with open(SCHEDULES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"スケジュールファイル読み込みエラー: {e}")
+        return {}
+
+def save_schedules_to_file(schedules: Dict[str, Any]):
+    try:
+        with open(SCHEDULES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(schedules, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"スケジュールファイル保存エラー: {e}")
+
+# ==================== 実行結果の永続化 ====================
+def load_results_from_file() -> Dict[str, Any]:
+    if not os.path.exists(RESULTS_FILE):
+        return {}
+    try:
+        with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"結果ファイル読み込みエラー: {e}")
+        return {}
+
+def save_result_to_file(task_id: str, status: str, result_text: str):
+    results = load_results_from_file()
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    results[task_id] = {
+        "status": status,
+        "timestamp": timestamp,
+        "result": result_text
+    }
+    try:
+        with open(RESULTS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"結果ファイル保存エラー: {e}")
+
+async def scheduled_task_job(task_id: str):
+    state.add_log(f"[スケジュール起動]: タスク {task_id} の自動実行時刻になりました。")
+    await enqueue_task(task_id)
+
+def apply_schedule_to_scheduler(task_id: str, sched_type: str, value: Any):
+    if scheduler.get_job(task_id):
+        scheduler.remove_job(task_id)
+        
+    if sched_type == "daily":
+        try:
+            hour, minute = map(int, value.split(":"))
+            scheduler.add_job(
+                scheduled_task_job,
+                CronTrigger(hour=hour, minute=minute),
+                id=task_id,
+                args=[task_id]
+            )
+            return True
+        except Exception as e:
+            state.add_log(f"エラー: 定期実行設定(daily)の解析に失敗しました ({value}): {e}")
+    elif sched_type == "interval":
+        try:
+            hours = int(value)
+            scheduler.add_job(
+                scheduled_task_job,
+                IntervalTrigger(hours=hours),
+                id=task_id,
+                args=[task_id]
+            )
+            return True
+        except Exception as e:
+            state.add_log(f"エラー: 定期実行設定(interval)の解析に失敗しました ({value}時間): {e}")
+    return False
+
+def init_schedules():
+    schedules = load_schedules_from_file()
+    for task_id, sched in schedules.items():
+        sched_type = sched.get("type")
+        value = sched.get("value")
+        if sched_type and value and sched_type != "none":
+            apply_schedule_to_scheduler(task_id, sched_type, value)
+
+# ==================== FastAPI イベントハンドラー ====================
+@app.on_event("startup")
+async def startup_event():
+    # キュー監視ワーカー起動
+    asyncio.create_task(task_worker())
+    # スケジュール復元と開始
+    init_schedules()
+    scheduler.start()
+    state.add_log("バックグラウンドスケジューラーを起動しました。")
+
+# ==================== API ルーティング ====================
 
 @app.get("/")
 async def get_index():
@@ -130,14 +307,15 @@ def get_status_endpoint():
     return {
         "status": state.status,
         "current_task": state.current_task,
-        "ask_question": state.ask_question
+        "ask_question": state.ask_question,
+        "queue_list": state.queue_list
     }
 
 class TaskRunRequest(BaseModel):
     task_id: str
     context_info: str = ""
 
-# エージェント実行のためのバックグラウンド処理
+# エージェント実行処理 (ワーカーから順次呼び出される)
 async def execute_agent_task(task_id: str, context_info: str):
     state.set_status("running")
     state.log_history.clear()
@@ -154,7 +332,6 @@ async def execute_agent_task(task_id: str, context_info: str):
         state.current_task = selected_task.get("name")
         state.broadcast_status()
 
-        # Sequence解析
         is_sequence = selected_task.get("type") == "sequence"
         if is_sequence:
             sequence_steps = selected_task.get("steps", [])
@@ -172,12 +349,10 @@ async def execute_agent_task(task_id: str, context_info: str):
             tasks_to_run = [selected_task]
             pass_context = False
 
-        # LLMの初期化
         llm, model_name = initialize_llm()
         profile_path = os.path.join(CURRENT_DIR, "browser_profile")
         os.makedirs(profile_path, exist_ok=True)
 
-        # Web用の ask_user コールバック関数
         def web_ask_user(question):
             state.ask_question = question
             state.set_status("asking")
@@ -186,7 +361,6 @@ async def execute_agent_task(task_id: str, context_info: str):
             
             state.add_log(f"[ユーザー入力要求]: {question}")
             
-            # FastAPIのスレッドセーフなループ上で実行を一時停止
             loop = asyncio.get_event_loop()
             future = asyncio.run_coroutine_threadsafe(wait_for_answer(), loop)
             return future.result()
@@ -195,8 +369,7 @@ async def execute_agent_task(task_id: str, context_info: str):
             await state.ask_event.wait()
             return state.ask_answer
 
-        # エージェント実行
-        await run_sequence(
+        final_res = await run_sequence(
             tasks_to_run=tasks_to_run,
             llm=llm,
             browser_profile_path=profile_path,
@@ -208,9 +381,39 @@ async def execute_agent_task(task_id: str, context_info: str):
         
         state.add_log("--- タスク実行完了 ---")
         state.set_status("success")
+        
+        # 最終結果の保存
+        save_result_to_file(task_id, "success", final_res)
+        
+        # クライアントへ最終結果をブロードキャスト
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        asyncio.create_task(state.broadcast({
+            "type": "task_result",
+            "data": {
+                "task_id": task_id,
+                "status": "success",
+                "timestamp": timestamp,
+                "result": final_res
+            }
+        }))
+        
     except Exception as e:
         state.add_log(f"システムエラーが発生しました: {e}")
         state.set_status("failed")
+        
+        error_msg = f"システムエラー: {e}"
+        save_result_to_file(task_id, "failed", error_msg)
+        
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        asyncio.create_task(state.broadcast({
+            "type": "task_result",
+            "data": {
+                "task_id": task_id,
+                "status": "failed",
+                "timestamp": timestamp,
+                "result": error_msg
+            }
+        }))
     finally:
         state.current_task = None
         state.ask_question = None
@@ -218,11 +421,69 @@ async def execute_agent_task(task_id: str, context_info: str):
 
 @app.post("/api/tasks/run")
 async def run_task(req: TaskRunRequest):
-    if state.status == "running" or state.status == "asking":
-        raise HTTPException(status_code=400, detail="別のタスクが実行中です。")
+    success = await enqueue_task(req.task_id, req.context_info)
+    if not success:
+        raise HTTPException(status_code=400, detail="既に実行待ちか、現在稼働中のタスクです。")
+    return {"message": "タスクをキューに追加しました。"}
+
+# ==================== スケジュールAPI ====================
+
+@app.get("/api/schedules")
+async def get_schedules():
+    return load_schedules_from_file()
+
+class ScheduleSettings(BaseModel):
+    task_id: str
+    type: str  # "daily", "interval", "none"
+    value: str  # "09:00" または "3" (時間)
+
+@app.post("/api/schedules")
+async def set_schedule(req: ScheduleSettings):
+    schedules = load_schedules_from_file()
     
-    asyncio.create_task(execute_agent_task(req.task_id, req.context_info))
-    return {"message": "タスクを開始しました。"}
+    if req.type == "none":
+        if req.task_id in schedules:
+            del schedules[req.task_id]
+        if scheduler.get_job(req.task_id):
+            scheduler.remove_job(req.task_id)
+        save_schedules_to_file(schedules)
+        state.add_log(f"スケジュールを解除しました: タスク {req.task_id}")
+        return {"message": "スケジュールを削除しました。"}
+        
+    success = apply_schedule_to_scheduler(req.task_id, req.type, req.value)
+    if not success:
+        raise HTTPException(status_code=400, detail="スケジュール設定の解析に失敗しました。")
+        
+    schedules[req.task_id] = {
+        "type": req.type,
+        "value": req.value
+    }
+    save_schedules_to_file(schedules)
+    
+    readable_type = "毎日" if req.type == "daily" else "インターバル"
+    readable_val = req.value + ("" if req.type == "daily" else "時間ごと")
+    state.add_log(f"スケジュールを設定しました: タスク {req.task_id} ({readable_type} {readable_val})")
+    
+    return {"message": "スケジュールを設定しました。"}
+
+@app.delete("/api/schedules/{task_id}")
+async def delete_schedule(task_id: str):
+    schedules = load_schedules_from_file()
+    if task_id in schedules:
+        del schedules[task_id]
+        save_schedules_to_file(schedules)
+    if scheduler.get_job(task_id):
+        scheduler.remove_job(task_id)
+    state.add_log(f"スケジュールを解除しました: タスク {task_id}")
+    return {"message": "スケジュールを削除しました。"}
+
+# ==================== 実行結果API ====================
+
+@app.get("/api/results")
+async def get_results():
+    return load_results_from_file()
+
+# ==================== WebSocket ====================
 
 class RespondRequest(BaseModel):
     answer: str
@@ -238,7 +499,6 @@ async def respond_to_agent(req: RespondRequest):
     state.ask_event.set()
     return {"message": "回答を受け付けました。エージェントを再開します。"}
 
-# WebSocketエンドポイント
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await state.connect(websocket)
@@ -257,6 +517,6 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         state.disconnect(websocket)
 
-# 静的ファイルがあるディレクトリをマウント
+# 静的ファイルルーティング
 if os.path.exists(WEB_DIR):
     app.mount("/web", StaticFiles(directory=WEB_DIR), name="web")

@@ -33,3 +33,6 @@ pc_local_assistant_trigger.py
 *.plist
 *.log
 estimations/
+schedules.json
+results.json
+

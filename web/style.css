@@ -329,3 +329,193 @@ h2 {
 .hidden {
     display: none !important;
 }
+
+/* 実行待ちキュー表示エリア */
+.queue-box {
+    background-color: #eff6ff;
+    border-bottom: 2px solid #bfdbfe;
+    padding: 12px 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e3a8a;
+}
+
+.queue-icon {
+    font-size: 16px;
+}
+
+.queue-title {
+    flex-shrink: 0;
+}
+
+.queue-list-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.queue-item-badge {
+    background-color: #dbeafe;
+    color: #1e40af;
+    padding: 4px 12px;
+    border-radius: 9999px;
+    border: 1px solid #93c5fd;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* スケジュール設定バッジ */
+.schedule-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+.sched-badge-daily {
+    background-color: #d1fae5;
+    color: #065f46;
+    border: 1px solid #10b981;
+}
+.sched-badge-interval {
+    background-color: #e0f2fe;
+    color: #075985;
+    border: 1px solid #0284c7;
+}
+
+/* タスクカード内のスケジュール編集エリア */
+.schedule-config-area {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #e4e4e7;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.schedule-title-sm {
+    font-size: 12px;
+    font-weight: 600;
+    color: #71717a;
+}
+
+.schedule-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.schedule-select, .schedule-val-input {
+    padding: 6px 10px;
+    border: 2px solid #e4e4e7;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+    background-color: #ffffff;
+    color: #18181b;
+}
+
+.schedule-select:focus, .schedule-val-input:focus {
+    border-color: #18181b;
+}
+
+.schedule-val-input {
+    width: 100px;
+}
+
+.schedule-save-btn {
+    padding: 6px 12px;
+    background-color: #27272a;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.schedule-save-btn:hover {
+    background-color: #3f3f46;
+}
+
+.schedule-delete-btn {
+    padding: 6px 12px;
+    background-color: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.schedule-delete-btn:hover {
+    background-color: #fecaca;
+}
+
+/* タスクカード内の前回の実行結果表示エリア */
+.result-container {
+    margin-top: 12px;
+    background-color: #fafafa;
+    border: 2px solid #e4e4e7;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.result-header {
+    background-color: #f4f4f5;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #27272a;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #e4e4e7;
+    cursor: pointer;
+    user-select: none;
+}
+
+.result-header:hover {
+    background-color: #e4e4e7;
+}
+
+.result-status-indicator {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.result-status-success {
+    background-color: #d1fae5;
+    color: #065f46;
+}
+
+.result-status-failed {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.result-body {
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #18181b;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 250px;
+    overflow-y: auto;
+    background-color: #ffffff;
+}
+
+
