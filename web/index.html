@@ -53,22 +53,18 @@
                 <div id="console-output" class="console-box">
                     <div class="system-msg">ログ接続を待機中...</div>
                 </div>
+                
+                <!-- 対話型ユーザー指示送信エリア -->
+                <div id="asking-container" class="asking-container-inline asking-idle">
+                    <div id="asking-prompt-text" class="asking-prompt-text">エージェントは待機中、またはタスク実行中です。</div>
+                    <div class="asking-input-group">
+                        <input type="text" id="asking-input" placeholder="入力待ちではありません。" disabled>
+                        <button id="asking-submit-btn" disabled>回答を送信</button>
+                    </div>
+                </div>
             </div>
         </section>
     </main>
-
-    <!-- 入力待ち（MFA等）全画面オーバーレイ -->
-    <div id="asking-overlay" class="overlay hidden">
-        <div class="overlay-content">
-            <div class="warning-icon">⚠</div>
-            <h1>エージェントからの質問 / 入力要求</h1>
-            <p id="asking-question">認証コードを入力してください。</p>
-            <div class="overlay-input-group">
-                <input type="text" id="asking-input" placeholder="回答を入力してEnterキーを押す">
-                <button id="asking-submit-btn">回答を送信</button>
-            </div>
-        </div>
-    </div>
 
     <script src="/web/app.js"></script>
 </body>

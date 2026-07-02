@@ -9,8 +9,9 @@ const queueContainer = document.getElementById('queue-container');
 const queueItems = document.getElementById('queue-items');
 const resultsList = document.getElementById('results-list');
 
-const askingOverlay = document.getElementById('asking-overlay');
-const askingQuestion = document.getElementById('asking-question');
+// インラインの対話型入力コンテナ
+const askingContainer = document.getElementById('asking-container');
+const askingPromptText = document.getElementById('asking-prompt-text');
 const askingInput = document.getElementById('asking-input');
 const askingSubmitBtn = document.getElementById('asking-submit-btn');
 
@@ -443,39 +444,71 @@ function updateUIState(status, currentTask, askQuestion, queueList) {
             statusHeader.classList.add('status-idle');
             text = '待機中';
             currentTaskDisplay.classList.add('hidden');
-            askingOverlay.classList.add('hidden');
+            
+            // 対話型入力コンテナを待機状態（無効化）に
+            askingContainer.className = 'asking-container-inline asking-idle';
+            askingPromptText.textContent = 'エージェントは待機中、またはタスク実行中です。';
+            askingInput.disabled = true;
+            askingSubmitBtn.disabled = true;
+            askingInput.placeholder = '入力待ちではありません。';
+            askingInput.value = '';
             break;
+            
         case 'running':
             statusHeader.classList.add('status-running');
             text = `実行中`;
             currentTaskDisplay.classList.remove('hidden');
             currentTaskDisplay.textContent = currentTask ? `現在のタスク: ${currentTask}` : '';
-            askingOverlay.classList.add('hidden');
+            
+            askingContainer.className = 'asking-container-inline asking-idle';
+            askingPromptText.textContent = 'エージェントは待機中、またはタスク実行中です。';
+            askingInput.disabled = true;
+            askingSubmitBtn.disabled = true;
+            askingInput.placeholder = '入力待ちではありません。';
+            askingInput.value = '';
             break;
+            
         case 'asking':
             statusHeader.classList.add('status-asking');
             text = 'ユーザーの確認・入力待ち';
             currentTaskDisplay.classList.remove('hidden');
             currentTaskDisplay.textContent = currentTask ? `現在のタスク: ${currentTask}` : '';
             
-            askingOverlay.classList.remove('hidden');
-            askingQuestion.textContent = askQuestion || '認証情報を入力してください。';
-            askingInput.value = '';
+            // 対話型入力コンテナをアクティブ（有効化・黄色枠線点滅）に
+            askingContainer.className = 'asking-container-inline asking-active';
+            askingPromptText.textContent = askQuestion || 'ユーザーの確認・入力が必要です。';
+            askingInput.disabled = false;
+            askingSubmitBtn.disabled = false;
+            askingInput.placeholder = '指示や回答を入力して送信...';
             setTimeout(() => {
                 askingInput.focus();
             }, 100);
             break;
+            
         case 'success':
             statusHeader.classList.add('status-success');
             text = 'タスク完了 (成功)';
             currentTaskDisplay.classList.add('hidden');
-            askingOverlay.classList.add('hidden');
+            
+            askingContainer.className = 'asking-container-inline asking-idle';
+            askingPromptText.textContent = 'エージェントは待機中、またはタスク実行中です。';
+            askingInput.disabled = true;
+            askingSubmitBtn.disabled = true;
+            askingInput.placeholder = '入力待ちではありません。';
+            askingInput.value = '';
             break;
+            
         case 'failed':
             statusHeader.classList.add('status-failed');
             text = 'エラー終了';
             currentTaskDisplay.classList.add('hidden');
-            askingOverlay.classList.add('hidden');
+            
+            askingContainer.className = 'asking-container-inline asking-idle';
+            askingPromptText.textContent = 'エージェントは待機中、またはタスク実行中です。';
+            askingInput.disabled = true;
+            askingSubmitBtn.disabled = true;
+            askingInput.placeholder = '入力待ちではありません。';
+            askingInput.value = '';
             break;
     }
     
@@ -518,7 +551,10 @@ function submitAnswer() {
         });
     }
     askingInput.value = '';
-    askingOverlay.classList.add('hidden');
+    
+    // 一時的にボタンなどを無効化（二重送信防止）
+    askingInput.disabled = true;
+    askingSubmitBtn.disabled = true;
 }
 
 // イベントリスナー
