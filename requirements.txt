@@ -1,4 +1,4 @@
-browser-use>=0.12.7
+browser-use>=0.13.1
 langchain-google-vertexai==3.2.3
 langchain-ollama>=1.1.0
 playwright==1.60.0

@@ -199,6 +199,7 @@ async def run_sequence(tasks_to_run, llm, browser_profile_path, ask_user_fn, con
         enable_default_extensions=False,
         wait_between_actions=1.0,
         minimum_wait_page_load_time=2.0,
+        ignore_default_args=['--extensions-on-chrome-urls'],
     )
 
     controller = create_controller(ask_user_fn)
